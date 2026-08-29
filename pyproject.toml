@@ -1,0 +1,14 @@
+[project]
+name = "adaptive-llm-serving"
+version = "0.1.0"
+description = "A reproducible learning project from single-GPU inference to AIBrix."
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+

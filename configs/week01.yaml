@@ -1,0 +1,22 @@
+model:
+  id: Qwen/Qwen2.5-0.5B-Instruct
+  revision: main
+  dtype: auto
+
+generation:
+  prompt: >-
+    Explain why caching intermediate attention keys and values makes
+    autoregressive language-model generation faster.
+  seed: 42
+
+benchmark:
+  warmup_runs: 2
+  repeats: 5
+  prompt_tokens: [32, 256, 1024]
+  output_tokens: [32, 128]
+  cache_modes: [true, false]
+
+output:
+  raw_csv: results/week01/raw/kv_cache.csv
+  run_metadata: results/week01/raw/run_metadata.json
+
