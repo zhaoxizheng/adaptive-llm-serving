@@ -2,9 +2,15 @@
 
 A hands-on learning project that starts with measured single-GPU autoregressive inference, progresses through vLLM internals and multi-replica serving, and ends with SLO-aware routing and autoscaling on AIBrix.
 
-The current milestone is Week 1: measure prefill, decode, and the effect of KV caching on an NVIDIA GPU.
+The first four weekly milestones cover measured autoregressive inference, static batching,
+queue-aware dynamic batching, and a controlled migration to vLLM serving.
 
-Start with the [24-week learning roadmap](docs/learning-roadmap.md), then follow the [Week 1 execution plan](docs/week-01-plan.md) and its [reference reading list](docs/week-01-references.md).
+Start with the [24-week learning roadmap](docs/learning-roadmap.md), then use the weekly plans and reading lists:
+
+- [Week 1 execution plan](docs/week-01-plan.md) and [references](docs/week-01-references.md)
+- [Week 2 execution plan](docs/week-02-plan.md) and [references](docs/week-02-references.md)
+- [Week 3 execution plan](docs/week-03-plan.md) and [references](docs/week-03-references.md)
+- [Week 4 execution plan](docs/week-04-plan.md) and [references](docs/week-04-references.md)
 
 ## Week 1 Architecture
 
@@ -106,7 +112,7 @@ Do not compare runs across different GPU models as if they were controlled resul
 
 ```text
 configs/             Versioned experiment configurations
-docs/                GCP and fallback environment guides
+docs/                Learning plans, references, and GCP environment guide
 reports/             Written experiment conclusions
 results/week01/raw/  Raw benchmark records
 scripts/             GCP lifecycle, environment, and transfer helpers
