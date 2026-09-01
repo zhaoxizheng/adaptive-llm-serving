@@ -21,40 +21,31 @@
 4. [Hugging Face: Padding and Truncation](https://huggingface.co/docs/transformers/pad_truncation)
    - 理解 batch 内不同长度输入为什么需要 padding 和 attention mask。
 
-5. [Hugging Face: Caching](https://huggingface.co/docs/transformers/cache_explanation)
-   - 复习 KV Cache shape 和 decode 时的增长方式。
-   - 特别关注 batch dimension、KV heads 和 sequence length。
-
-6. [Hugging Face: Cache Strategies](https://huggingface.co/docs/transformers/kv_cache)
+5. [Hugging Face: Cache Strategies](https://huggingface.co/docs/transformers/kv_cache)
    - 比较 Dynamic、Static 和 offloaded cache 的定位。
    - 本周先保持默认 Dynamic Cache，不把 cache implementation 加入正式变量。
+   - KV Cache 基础复用 Week 1 Reference #3，不重复列出。
 
 ## 必读：CUDA 显存与计时
 
-7. [PyTorch CUDA Semantics: Memory Management](https://docs.pytorch.org/docs/stable/notes/cuda.html#memory-management)
-   - 重点理解 caching allocator、allocated memory 和 reserved memory。
-   - 回答为什么 `empty_cache()` 不等于释放仍被 tensor 占用的显存。
-
-8. [torch.cuda.max_memory_allocated](https://docs.pytorch.org/docs/stable/generated/torch.cuda.max_memory_allocated.html)
+6. [torch.cuda.max_memory_allocated](https://docs.pytorch.org/docs/stable/generated/torch.cuda.max_memory_allocated.html)
    - 用于记录 tensor 实际分配峰值。
 
-9. [torch.cuda.max_memory_reserved](https://docs.pytorch.org/docs/stable/generated/torch.cuda.max_memory_reserved.html)
+7. [torch.cuda.max_memory_reserved](https://docs.pytorch.org/docs/stable/generated/torch.cuda.max_memory_reserved.html)
    - 与 allocated peak 并列记录，用于识别 allocator cache 和碎片。
 
-10. [PyTorch Benchmark Recipe](https://docs.pytorch.org/tutorials/recipes/recipes/benchmark.html)
+8. [PyTorch Benchmark Recipe](https://docs.pytorch.org/tutorials/recipes/recipes/benchmark.html)
     - 理解 warmup、同步、重复运行和环境噪声。
     - 本周不必迁移到 `torch.utils.benchmark`，先用它审查当前方法。
 
+CUDA memory management 复用 Week 1 Reference #4 的对应章节。
+
 ## 选读：为什么需要更好的 Batching
 
-11. [Orca: A Distributed Serving System for Transformer-Based Generative Models](https://www.usenix.org/conference/osdi22/presentation/yu)
-    - 重点阅读 iteration-level scheduling。
-    - 比较静态 batch 与请求在不同时间结束时的资源浪费。
-
-12. [FasterTransformer: Efficient Transformer Inference on GPU](https://developer.nvidia.com/blog/accelerated-inference-for-large-transformer-models-using-nvidia-fastertransformer-and-tensorrt/)
+9. [FasterTransformer: Efficient Transformer Inference on GPU](https://developer.nvidia.com/blog/accelerated-inference-for-large-transformer-models-using-nvidia-fastertransformer-and-tensorrt/)
     - 作为 GPU batching 与 kernel 优化的背景材料，不要求复现。
 
-13. [Roofline: An Insightful Visual Performance Model](https://crd.lbl.gov/assets/pubs_presos/parlab/roofline1.pdf)
+10. [Roofline: An Insightful Visual Performance Model](https://crd.lbl.gov/assets/pubs_presos/parlab/roofline1.pdf)
     - 选读摘要和图 1。
     - 建立 arithmetic intensity 的直觉，为解释 prefill 更偏 compute-bound、decode 更偏 memory-bound 做准备。
 
@@ -63,9 +54,9 @@
 | 日期 | 阅读 | 对应任务 |
 |---|---|---|
 | Day 1 | 1–3 | 冻结指标定义 |
-| Day 2 | 4–6 | 实现 batched input 和 KV 估算 |
-| Day 3 | 7–10 | 实现显存记录和严谨计时 |
-| Day 6–7 | 11–13 | 解释结果并连接到动态 batching |
+| Day 2 | 4–5 | 实现 batched input 和 KV 估算 |
+| Day 3 | 6–8，并复用 Week 1 #4 | 实现显存记录和严谨计时 |
+| Day 6–7 | 9–10 | 解释结果并连接到动态 batching |
 
 ## 阅读后的自测问题
 

@@ -54,16 +54,6 @@
 13. [GCP GPU regions and zones](https://cloud.google.com/compute/docs/gpus/gpu-regions-zones)
     - 创建失败时先核对目标 zone 是否支持 G2，再判断是 quota 还是临时容量问题。
 
-## 5. 选读：建立系统视角
-
-14. [Orca: A Distributed Serving System for Transformer-Based Generative Models](https://www.usenix.org/conference/osdi22/presentation/yu)
-    - 第一周只读摘要、Introduction 和 iteration-level scheduling 部分。
-    - 它解释了为什么生成式模型 serving 不能简单照搬传统 request batching。
-
-15. [Efficient Memory Management for Large Language Model Serving with PagedAttention](https://arxiv.org/abs/2309.06180)
-    - 第一周只读摘要和 Introduction，暂不深入 vLLM 实现。
-    - 先记住问题：传统 KV Cache 管理为什么会产生浪费和碎片。
-
 ## 推荐阅读节奏
 
 | 时间 | 内容 | 目标 |
@@ -72,7 +62,6 @@
 | Day 2 | 8–9 | 能用模型配置手算 KV Cache 大小 |
 | Day 3 | 10–13 | 能安全创建、停止和恢复 GCP Spot VM |
 | Day 4 | 4–7 | 能解释 CUDA 异步执行和当前计时方法 |
-| Day 6–7 | 14–15 | 把第一周单请求实验放入 serving 系统背景中 |
 
 阅读完成标准不是“看完链接”，而是可以回答：
 

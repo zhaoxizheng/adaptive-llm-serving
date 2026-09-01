@@ -28,19 +28,13 @@
    - 重点建立 tail latency 直觉：平均值正常并不代表用户体验稳定。
    - 本周把这种直觉落实到 P95/P99、queue depth 和 rejection rate。
 
-6. [DistServe: Disaggregating Prefill and Decoding for Goodput-optimized LLM Serving](https://www.usenix.org/conference/osdi24/presentation/zhong-yinmin)
-   - 本周只读 Abstract、Introduction 和 SLO/goodput 定义。
-   - 观察 TTFT 与 TPOT 约束为何会让“完成最多请求”比最大 raw throughput 更有意义。
-
 ## 衔接 Week 4
 
-7. [vLLM `bench serve`](https://docs.vllm.ai/en/latest/cli/bench/serve/)
-   - 查看 request rate、burstiness、并发限制和 percentile metrics。
-   - 本周不要求运行 vLLM；先用它审查自己的 workload schema 是否缺关键字段。
-
-8. [vLLM Documentation](https://docs.vllm.ai/en/latest/)
+6. [vLLM Documentation](https://docs.vllm.ai/en/latest/)
    - 浏览首页的 Serving、Benchmarking 和 Design 信息结构。
    - 不要开始逐文件读 scheduler 源码；Week 4 先把 vLLM 当作服务使用。
+
+SLO/goodput 定义复用 Week 2 Reference #3；`bench serve` 在 Week 4 首次实际使用时阅读，不提前重复列出。
 
 ## 阅读顺序
 
@@ -48,8 +42,8 @@
 |---|---|---|
 | Day 1 | 1–3 | 队列、flush 和 overload contract |
 | Day 2 | 4–5 | continuous batching 与尾延迟直觉 |
-| Day 3–5 | 6–7 | SLO 指标和 workload 设计 |
-| Day 7 | 8 | 为 vLLM Week 4 建立文档地图 |
+| Day 3–5 | 复用 Week 2 #3 | SLO 指标和 workload 设计 |
+| Day 7 | 6 | 为 vLLM Week 4 建立文档地图 |
 
 ## 阅读后的自测问题
 

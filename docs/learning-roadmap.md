@@ -1,6 +1,6 @@
 # Learning Roadmap: 从 vLLM 到 AIBrix
 
-> 目标：用 24 周、每周约 10–12 小时，从理解单机 LLM 推理逐步过渡到集群级推理服务，并完成一个基于 vLLM、Kubernetes 和 AIBrix 的可复现项目。
+> 目标：用 22 周、通常每周约 10–12 小时，从理解单机 LLM 推理逐步过渡到集群级推理服务，并完成一个基于 vLLM、Kubernetes 和 AIBrix 的可复现项目。Prometheus 与 Kubernetes 作为已掌握的基础设施直接使用，不再安排基础学习。
 
 ## 路线总览
 
@@ -160,7 +160,7 @@ estimated_cost: <amount-and-currency>
 - [ ] 使用 `vllm serve` 启动 OpenAI-compatible API
 - [ ] 实现 streaming 和 non-streaming 客户端
 - [ ] 使用官方 benchmark 工具压测
-- [ ] 接入 Prometheus 和 Grafana
+- [ ] 将 vLLM 指标接入已有 Prometheus/Grafana，并与 benchmark run 对齐
 - [ ] 对比 Hugging Face Transformers 与 vLLM
 
 ### 参数实验
@@ -257,7 +257,7 @@ Attention / CUDA Graph / Model
 - [ ] Nsight Systems
 - [ ] Nsight Compute
 - [ ] vLLM metrics
-- [ ] Prometheus/Grafana
+- [ ] 复用已有 Prometheus/Grafana 观测栈
 - [ ] GPU utilization、memory bandwidth 和 kernel timeline
 
 ### 实验一：Prefix caching
@@ -299,21 +299,18 @@ Attention / CUDA Graph / Model
 - [vLLM Optimization and Tuning](https://docs.vllm.ai/en/latest/configuration/optimization/)
 - [vLLM Paged Attention](https://docs.vllm.ai/en/latest/design/paged_attention/)
 
-## 第五阶段：从单实例进入 Kubernetes（第 15–17 周）
+## 第五阶段：多副本集成验证（第 15 周）
 
-在使用 AIBrix 前，先独立搭建一个最小的多副本系统。
+Kubernetes 基础已经掌握，本阶段不再学习 Pod、Deployment、Service、Probe、HPA 或 Prometheus 接入。直接用一周搭建最小多副本基线，为 AIBrix 对照实验准备证据。
 
 ### 部署任务
 
-- [ ] Docker 化 vLLM server
-- [ ] 创建 Kubernetes Deployment 和 Service
+- [ ] 复用已有容器与 Kubernetes 模板部署 vLLM server
 - [ ] 部署两个或更多 vLLM replicas
-- [ ] 配置 readiness/liveness probe
-- [ ] 暴露 Prometheus metrics
-- [ ] 建立 Grafana dashboard
+- [ ] 配置并验证 readiness、graceful shutdown 和请求排空
+- [ ] 将各 replica 的推理指标接入已有观测栈
 - [ ] 添加简单 round-robin gateway
-- [ ] 实现 HPA 或手动扩缩容
-- [ ] 实现 graceful shutdown 和请求排空
+- [ ] 运行固定副本与现有 HPA 的基线实验
 
 ### 需要证明的问题
 
@@ -324,7 +321,14 @@ Attention / CUDA Graph / Model
 - [ ] 扩容决策可能在新实例可用前已经过时
 - [ ] round-robin 在长短请求混合或共享前缀负载下存在明显缺陷
 
-## 第六阶段：学习 AIBrix（第 18–20 周）
+### 一周产出
+
+- [ ] 可重复部署的双副本 vLLM baseline
+- [ ] round-robin 与现有 HPA 的可复现实验
+- [ ] replica-level queue、TTFT、KV cache 与 GPU 指标证据
+- [ ] 一份说明普通负载均衡和通用 HPA 局限的短报告
+
+## 第六阶段：学习 AIBrix（第 16–18 周）
 
 ### 架构边界
 
@@ -372,7 +376,7 @@ Attention / CUDA Graph / Model
 - [Benchmark and Workload Generator](https://aibrix.readthedocs.io/latest/features/benchmark-and-generator.html)
 - [KV Cache Events Synchronization](https://aibrix.readthedocs.io/latest/features/kv-event-sync.html)
 
-## 第七阶段：最终项目（第 21–24 周）
+## 第七阶段：最终项目（第 19–22 周）
 
 ### 项目名称
 
@@ -553,6 +557,7 @@ make report
 ## 时间调整
 
 - 每周约 5 小时：将路线延长到 8–9 个月。
-- 已熟悉 Kubernetes：压缩第五阶段，把更多时间投入 vLLM scheduler、KV Cache 和最终实验。
+- 当前精简版已假设熟悉 Prometheus 与 Kubernetes：第五阶段从 3 周压缩到 1 周，Week 5 只保留 vLLM metric contract 与实验对齐。
+- 相对原 24 周版本，日历时间减少 2 周；Prometheus 基础内容再减少约 2–4 小时，总计约节省 22–28 小时（中心估算约 9%–10%）。
 - 目标偏 CUDA/Kernel：增加 Triton、CUDA 和算子 profiling，弱化 AIBrix controller 开发。
 - 目标偏 AI Infra/Serving：保持当前比重，重点打磨路由、扩缩容、可观测性和故障实验。
