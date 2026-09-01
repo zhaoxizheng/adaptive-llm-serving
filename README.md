@@ -2,8 +2,9 @@
 
 A hands-on learning project that starts with measured single-GPU autoregressive inference, progresses through vLLM internals and multi-replica serving, and ends with SLO-aware routing and autoscaling on AIBrix.
 
-The first eight weekly milestones cover measured autoregressive inference, batching,
-single-instance vLLM serving and tuning, then the API-to-engine request path and scheduler.
+The first twelve weekly milestones cover measured autoregressive inference, batching,
+single-instance vLLM serving and tuning, the vLLM request path and memory lifecycle,
+then framework- and system-level profiling.
 
 Start with the [22-week learning roadmap](docs/learning-roadmap.md), then use the weekly plans and reading lists:
 
@@ -15,6 +16,10 @@ Start with the [22-week learning roadmap](docs/learning-roadmap.md), then use th
 - [Week 6 execution plan](docs/week-06-plan.md) and [references](docs/week-06-references.md)
 - [Week 7 execution plan](docs/week-07-plan.md) and [references](docs/week-07-references.md)
 - [Week 8 execution plan](docs/week-08-plan.md) and [references](docs/week-08-references.md)
+- [Week 9 execution plan](docs/week-09-plan.md) and [references](docs/week-09-references.md)
+- [Week 10 execution plan](docs/week-10-plan.md) and [references](docs/week-10-references.md)
+- [Week 11 execution plan](docs/week-11-plan.md) and [references](docs/week-11-references.md)
+- [Week 12 execution plan](docs/week-12-plan.md) and [references](docs/week-12-references.md)
 
 ## Week 1 Architecture
 

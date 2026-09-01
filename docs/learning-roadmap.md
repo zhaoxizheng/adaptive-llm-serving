@@ -197,6 +197,13 @@ estimated_cost: <amount-and-currency>
 
 ## 第三阶段：读懂 vLLM 核心链路（第 7–10 周）
 
+### 每周主线
+
+- Week 7：追踪 OpenAI API、AsyncLLM 与 Engine Core 的请求链路
+- Week 8：理解 scheduler、token budget、请求状态与 chunked prefill
+- Week 9：理解 KV Cache Manager、block 生命周期与 prefix cache
+- Week 10：追踪 GPU Worker、Model Runner、model forward 与 sampling
+
 ### 请求链路
 
 ```text
@@ -250,6 +257,13 @@ Attention / CUDA Graph / Model
 参考资料：[vLLM Architecture Overview](https://docs.vllm.ai/en/latest/design/arch_overview/)
 
 ## 第四阶段：推理性能专项（第 11–14 周）
+
+### 每周主线
+
+- Week 11：用 PyTorch Profiler 分解 framework/operator 瓶颈
+- Week 12：用 Nsight Systems 重建 CPU–GPU timeline
+- Week 13：用 Nsight Compute 深挖关键 kernel，并完成 prefix caching 专项
+- Week 14：完成 chunked prefill、CUDA Graph 与 parallelism 的受控优化实验
 
 ### 工具
 
