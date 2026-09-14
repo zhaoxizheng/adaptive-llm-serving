@@ -258,6 +258,8 @@ Attention / CUDA Graph / Model
 
 ## 第四阶段：推理性能专项（第 11–14 周）
 
+执行计划：[Week 11](week-11-plan.md) / [资料](week-11-references.md)、[Week 12](week-12-plan.md) / [资料](week-12-references.md)、[Week 13](week-13-plan.md) / [资料](week-13-references.md)、[Week 14](week-14-plan.md) / [资料](week-14-references.md)。
+
 ### 每周主线
 
 - Week 11：用 PyTorch Profiler 分解 framework/operator 瓶颈
@@ -317,6 +319,8 @@ Attention / CUDA Graph / Model
 
 Kubernetes 基础已经掌握，本阶段不再学习 Pod、Deployment、Service、Probe、HPA 或 Prometheus 接入。直接用一周搭建最小多副本基线，为 AIBrix 对照实验准备证据。
 
+执行计划：[Week 15](week-15-plan.md) / [资料](week-15-references.md)。使用两个真实 GPU slots；区分 request-level round-robin 与 Service 的连接分发，并将 HPA 的副本变化和 GPU 成本一起报告。
+
 ### 部署任务
 
 - [ ] 复用已有容器与 Kubernetes 模板部署 vLLM server
@@ -343,6 +347,14 @@ Kubernetes 基础已经掌握，本阶段不再学习 Pod、Deployment、Service
 - [ ] 一份说明普通负载均衡和通用 HPA 局限的短报告
 
 ## 第六阶段：学习 AIBrix（第 16–18 周）
+
+### 每周主线
+
+- Week 16：架构、最小安装、请求路径与固定副本路由 A/B（[计划](week-16-plan.md) / [资料](week-16-references.md)）。
+- Week 17：inference-aware autoscaling，对照 Week 15 CPU-based HPA，量化冷启动、SLO 和 GPU-hours。
+- Week 18：prefix/cache-aware routing，区分实例内 APC、KV event state sync 与实际 KV tensor transfer。
+
+Week 16 固定副本数，不同时启用 autoscaling 或 distributed KV；路由实验记录所选 release 的完整 gate/blending 配置，不只依据策略名称归因。Week 17–18 的详细执行页后续补充。
 
 ### 架构边界
 

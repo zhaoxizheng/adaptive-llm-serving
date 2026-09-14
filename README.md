@@ -2,9 +2,10 @@
 
 A hands-on learning project that starts with measured single-GPU autoregressive inference, progresses through vLLM internals and multi-replica serving, and ends with SLO-aware routing and autoscaling on AIBrix.
 
-The first twelve weekly milestones cover measured autoregressive inference, batching,
+The first sixteen weekly milestones cover measured autoregressive inference, batching,
 single-instance vLLM serving and tuning, the vLLM request path and memory lifecycle,
-then framework- and system-level profiling.
+framework/system/kernel profiling, controlled optimization, multi-replica baselines,
+and the first AIBrix routing experiments.
 
 Start with the [22-week learning roadmap](docs/learning-roadmap.md), then use the weekly plans and reading lists:
 
@@ -20,6 +21,29 @@ Start with the [22-week learning roadmap](docs/learning-roadmap.md), then use th
 - [Week 10 execution plan](docs/week-10-plan.md) and [references](docs/week-10-references.md)
 - [Week 11 execution plan](docs/week-11-plan.md) and [references](docs/week-11-references.md)
 - [Week 12 execution plan](docs/week-12-plan.md) and [references](docs/week-12-references.md)
+- [Week 13 execution plan](docs/week-13-plan.md) and [references](docs/week-13-references.md)
+- [Week 14 execution plan](docs/week-14-plan.md) and [references](docs/week-14-references.md)
+- [Week 15 execution plan](docs/week-15-plan.md) and [references](docs/week-15-references.md)
+- [Week 16 execution plan](docs/week-16-plan.md) and [references](docs/week-16-references.md)
+
+### Next Four Learning Weeks
+
+This extends the documented sequence through Week 16; it does not imply that
+Weeks 1–12 are complete. Week numbers are prerequisite-based milestones, not
+calendar dates. Start Week 13 after the Week 12 evidence is available, and shift
+later weeks if a prerequisite is blocked. Each week budgets about 11 hours.
+
+| Week | Focus | Deliverable |
+|---|---|---|
+| 13 | Nsight Compute and prefix caching | Kernel evidence plus cold/warm cache service A/B |
+| 14 | Chunked prefill, CUDA Graph, tensor parallelism | Controlled optimization report and frozen serving baseline |
+| 15 | Multi-replica vLLM and request-level round-robin | Two-GPU baseline, HPA burst comparison, lifecycle evidence |
+| 16 | AIBrix architecture and gateway routing | Request path and fixed-replica random/least-request comparison |
+
+Week 14's tensor-parallel experiment requires two GPUs; Week 15 onward requires
+two real GPU slots for performance validation. Unavailable hardware is a blocked
+or deferred experiment, not a successful CPU substitute. The weekly deliverable
+paths are planned artifacts, not claims of implemented features or measured gains.
 
 ## Week 1 Architecture
 
