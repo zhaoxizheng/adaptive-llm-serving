@@ -20,8 +20,8 @@
 - [Week 4 references](week-04-references.md) #3–5：online serving、CLI 和 serving benchmark；验证 streaming、timeouts 与原始结果。
 - [Week 4 references](week-04-references.md) #7：逐 replica 的 queue、request、token 和 KV 指标。
 - [Week 5 references](week-05-references.md)：复用已有 metric contract 和 run 对齐方法，不重做监控基础建设。
-- [Week 13 references](week-13-references.md) #4：实例内 APC 的 cache 状态，不能假设两个 replicas 自动共享 KV。
-- [Week 14 references](week-14-references.md) #3：区分一个跨 GPU 的 model replica 与多个独立 replicas。
+- [Week 4 references](week-04-references.md) #10：实例内 APC 的 cache 状态，不能假设两个 replicas 自动共享 KV。
+- [Week 14 references](week-14-references.md) #1：区分一个跨 GPU 的 model replica 与多个独立 replicas。
 
 ## 实验前必须检查的本地证据
 
@@ -38,7 +38,7 @@
 |---|---|---|
 | Day 1 | 1，Week 4 #3–4 | GPU Pod、startup/readiness 和 endpoint |
 | Day 2 | Gateway 本地配置，Week 4 #3 | 逐请求 RR、streaming、取消 |
-| Day 3–4 | Week 4 #5/#7、Week 13 #4 | 分组 workload 与逐副本 cache/queue |
+| Day 3–4 | Week 4 #5/#7/#10 | 分组 workload 与逐副本 cache/queue |
 | Day 5 | 2 | CPU-based HPA 与 burst 时间线 |
 | Day 6 | 1 | 冷启动、drain、Pod 失败 |
 | Day 7 | 回看 1–2 | baseline 报告和限制 |

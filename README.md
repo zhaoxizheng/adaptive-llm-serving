@@ -2,10 +2,10 @@
 
 A hands-on learning project that starts with measured single-GPU autoregressive inference, progresses through vLLM internals and multi-replica serving, and ends with SLO-aware routing and autoscaling on AIBrix.
 
-The first sixteen weekly milestones cover measured autoregressive inference, batching,
+The first twenty weekly milestones cover measured autoregressive inference, batching,
 single-instance vLLM serving and tuning, the vLLM request path and memory lifecycle,
-framework/system/kernel profiling, controlled optimization, multi-replica baselines,
-and the first AIBrix routing experiments.
+framework/system/kernel profiling, multi-replica baselines, AIBrix autoscaling and
+cache-aware routing, then the capstone experiment design and minimal routing policy.
 
 Start with the [22-week learning roadmap](docs/learning-roadmap.md), then use the weekly plans and reading lists:
 
@@ -25,25 +25,40 @@ Start with the [22-week learning roadmap](docs/learning-roadmap.md), then use th
 - [Week 14 execution plan](docs/week-14-plan.md) and [references](docs/week-14-references.md)
 - [Week 15 execution plan](docs/week-15-plan.md) and [references](docs/week-15-references.md)
 - [Week 16 execution plan](docs/week-16-plan.md) and [references](docs/week-16-references.md)
+- [Week 17 execution plan](docs/week-17-plan.md) and [references](docs/week-17-references.md)
+- [Week 18 execution plan](docs/week-18-plan.md) and [references](docs/week-18-references.md)
+- [Week 19 execution plan](docs/week-19-plan.md) and [references](docs/week-19-references.md)
+- [Week 20 execution plan](docs/week-20-plan.md) and [references](docs/week-20-references.md)
 
 ### Next Four Learning Weeks
 
-This extends the documented sequence through Week 16; it does not imply that
-Weeks 1–12 are complete. Week numbers are prerequisite-based milestones, not
-calendar dates. Start Week 13 after the Week 12 evidence is available, and shift
+This extends the documented sequence through Week 20; it does not imply that
+Weeks 1–16 are complete. Week numbers are prerequisite-based milestones, not
+calendar dates. Start Week 17 after the Week 16 evidence is available, and shift
 later weeks if a prerequisite is blocked. Each week budgets about 11 hours.
 
 | Week | Focus | Deliverable |
 |---|---|---|
-| 13 | Nsight Compute and prefix caching | Kernel evidence plus cold/warm cache service A/B |
-| 14 | Chunked prefill, CUDA Graph, tensor parallelism | Controlled optimization report and frozen serving baseline |
-| 15 | Multi-replica vLLM and request-level round-robin | Two-GPU baseline, HPA burst comparison, lifecycle evidence |
-| 16 | AIBrix architecture and gateway routing | Request path and fixed-replica random/least-request comparison |
+| 17 | Inference-aware autoscaling with fixed routing | Metric contract, scaling timeline, SLO and allocated/billed GPU-hours |
+| 18 | Cache-aware routing with fixed replicas | Locality/load comparison and KV event consistency evidence |
+| 19 | Capstone experiment design and offline policy | Frozen SLO/data splits, minimal policy contract and replay tests |
+| 20 | Minimal AIBrix routing integration | Correctness tests, streaming smoke and fixed-replica A/B with ablation |
 
-Week 14's tensor-parallel experiment requires two GPUs; Week 15 onward requires
-two real GPU slots for performance validation. Unavailable hardware is a blocked
-or deferred experiment, not a successful CPU substitute. The weekly deliverable
-paths are planned artifacts, not claims of implemented features or measured gains.
+Performance validation requires two real GPU slots; Week 19 is primarily local
+analysis. Unavailable hardware is a blocked or deferred experiment, not a
+successful CPU substitute. The deliverable paths are planned artifacts, not
+claims of implemented features or measured gains. Combined routing/autoscaling
+experiments and final held-out validation remain in Weeks 21–22.
+
+### Reference Reuse
+
+Each external source appears once in the numbered weekly reading lists, at its
+first introduction. Later weeks link to that week's reference number and state
+only the new question or section to revisit. Reused material is not counted as
+new reading; changing a title, fragment, or version URL does not make it a new
+source. Distinct design/API documents on the same topic are included only when
+they add a specific missing concept. Keep reading schedules and cross-week
+reference numbers consistent when removing duplicate entries.
 
 ## Week 1 Architecture
 

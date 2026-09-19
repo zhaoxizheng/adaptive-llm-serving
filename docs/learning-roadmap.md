@@ -351,10 +351,10 @@ Kubernetes 基础已经掌握，本阶段不再学习 Pod、Deployment、Service
 ### 每周主线
 
 - Week 16：架构、最小安装、请求路径与固定副本路由 A/B（[计划](week-16-plan.md) / [资料](week-16-references.md)）。
-- Week 17：inference-aware autoscaling，对照 Week 15 CPU-based HPA，量化冷启动、SLO 和 GPU-hours。
-- Week 18：prefix/cache-aware routing，区分实例内 APC、KV event state sync 与实际 KV tensor transfer。
+- Week 17：inference-aware autoscaling，对照 Week 15 CPU-based HPA，量化冷启动、SLO 和 GPU-hours（[计划](week-17-plan.md) / [资料](week-17-references.md)）。
+- Week 18：prefix/cache-aware routing，区分实例内 APC、KV event state sync 与实际 KV tensor transfer（[计划](week-18-plan.md) / [资料](week-18-references.md)）。
 
-Week 16 固定副本数，不同时启用 autoscaling 或 distributed KV；路由实验记录所选 release 的完整 gate/blending 配置，不只依据策略名称归因。Week 17–18 的详细执行页后续补充。
+Week 16 固定副本数，Week 17 固定路由研究扩缩容，Week 18 恢复固定副本研究 cache locality；不在一个 A/B 中同时改变两个控制环。路由实验记录所选 release 的完整 gate/blending 配置，不只依据策略名称归因。
 
 ### 架构边界
 
@@ -394,15 +394,18 @@ Week 16 固定副本数，不同时启用 autoscaling 或 distributed KV；路�
 - [ ] 能从 gateway 一直追踪到具体 vLLM Pod
 - [ ] 能解释为什么只依赖 GPU utilization 扩缩容可能不稳定
 
-参考资料：
-
-- [AIBrix Architecture](https://aibrix.readthedocs.io/latest/designs/architecture.html)
-- [Gateway Routing](https://aibrix.readthedocs.io/latest/features/gateway-plugins.html)
-- [Autoscaling](https://aibrix.readthedocs.io/latest/features/autoscaling/autoscaling.html)
-- [Benchmark and Workload Generator](https://aibrix.readthedocs.io/latest/features/benchmark-and-generator.html)
-- [KV Cache Events Synchronization](https://aibrix.readthedocs.io/latest/features/kv-event-sync.html)
+参考资料按首次收录周次维护，不在阶段页重复书目：架构/路由/benchmark 与 autoscaling/KV events 概览见 [Week 16 references](week-16-references.md)，扩缩容细节见 [Week 17 references](week-17-references.md)，locality/load 与 cache identity 见 [Week 18 references](week-18-references.md)。
 
 ## 第七阶段：最终项目（第 19–22 周）
+
+### 每周主线
+
+- Week 19：冻结问题、SLO、数据分组与对照矩阵，离线回放最小策略（[计划](week-19-plan.md) / [资料](week-19-references.md)）。
+- Week 20：把经过离线验证的策略接入 AIBrix，固定副本完成测试与小规模 A/B（[计划](week-20-plan.md) / [资料](week-20-references.md)）。
+- Week 21：接入 Week 17 的扩缩容基线，完成路由 × 扩缩容消融及故障验证。
+- Week 22：独立重复最终矩阵，整理成本、限制、演示与技术文章。
+
+Week 19–20 不把离线预测、smoke 或单次收益当作最终项目结论；Week 21–22 的详细执行页后续补充。
 
 ### 项目名称
 

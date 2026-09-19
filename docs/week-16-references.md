@@ -49,7 +49,7 @@
 ## 需要复用的前置资料
 
 - [Week 15 references](week-15-references.md)：request-level RR、cold start、drain 与 HPA baseline。
-- [Week 13 references](week-13-references.md) #4：实例内 prefix caching 与 cold/warm 实验。
+- [Week 4 references](week-04-references.md) #10：实例内 prefix caching；cold/warm 实验复用 [Week 13 plan](week-13-plan.md)。
 - [Week 4 references](week-04-references.md) #7：vLLM metric 语义，不把 gateway in-flight 与 server running 混成一个计数。
 
 ## 阅读顺序

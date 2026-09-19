@@ -18,15 +18,10 @@
    - 在租用长时 GPU 前检查 profiler 权限，理解 `ERR_NVGPUCTRPERM`。
    - 权限处理依赖 driver 和云平台；只在获授权环境中按管理员规范处理，不照抄全局放权步骤。
 
-## 必读：Prefix Caching
+## 复用：Prefix Caching
 
-4. [vLLM Automatic Prefix Caching](https://docs.vllm.ai/en/latest/features/automatic_prefix_caching/)
-   - 复习 shared prefix 对 prefill 的复用，以及对新 token decode 的限制。
-   - 本周从“开关可用”推进到 cache cold/warm、低重合对照和 near-SLO 的受控实验。
-
-5. [vLLM Optimization and Tuning](https://docs.vllm.ai/en/latest/configuration/optimization/)
-   - 重点复核 preemption、KV capacity 与 batch/token budget 的关系。
-   - 不把提升 hit rate 等同于改善所有 workload 的 P99。
+- APC 复用 [Week 4 references](week-04-references.md) #10：本周只将已有机制用于 cold/warm、低重合和 near-SLO 对照，不重新学习基础原理。
+- Tuning 复用 [Week 4 references](week-04-references.md) #9：只查 preemption、KV capacity 与 token budget 对本次实验的影响。
 
 ## 需要复用的前置资料
 
@@ -41,9 +36,9 @@
 |---|---|---|
 | Day 1 | 1–3，Week 12 #1–3 | 权限、kernel target、采集扰动 |
 | Day 2–3 | 1–2 | 最小 counter report 与瓶颈判断 |
-| Day 4 | 4，Week 9 #1–3 | prefix families 与 cache 状态 |
-| Day 5–6 | 5，Week 4 #7 | near-SLO 对照与指标单位 |
-| Day 7 | 回看 1、4–5 | 写出证据限制和下一步优化 |
+| Day 4 | 复用 Week 4 #10、Week 9 #1–3 | prefix families 与 cache 状态 |
+| Day 5–6 | 复用 Week 4 #7/#9 | near-SLO 对照与指标单位 |
+| Day 7 | 回看 1，复用 Week 4 #9–10 | 写出证据限制和下一步优化 |
 
 ## 阅读后的自测问题
 

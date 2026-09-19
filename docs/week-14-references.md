@@ -4,39 +4,31 @@
 
 以下官方页面已于 2026-09-14 在线核对；原 `serving/distributed_serving/` 入口已失效，使用当前 Parallelism and Scaling 页面。实际参数和默认值仍以固定 vLLM revision 为准。
 
-## 必读：调度与执行优化
+## 新增必读：Parallelism
 
-1. [vLLM Optimization and Tuning](https://docs.vllm.ai/en/latest/configuration/optimization/)
-   - 阅读 Chunked Prefill、Performance Tuning with Chunked Prefill、Preemption 与 Parallelism Strategies。
-   - 将 token budget 的吞吐收益与 short/long 请求的 TTFT、TPOT 分开解释。
-
-2. [vLLM CUDA Graphs Design](https://docs.vllm.ai/en/latest/design/cuda_graphs/)
-   - 阅读 modes、BatchDescriptor、dispatcher、capture/warmup 与 backend compatibility。
-   - 注意 graph mode、compilation、padding 和 capture memory 的关联，不把 `enforce-eager` 默认当作只关闭 graph。
-
-3. [vLLM Parallelism and Scaling](https://docs.vllm.ai/en/latest/serving/parallelism_scaling/)
+1. [vLLM Parallelism and Scaling](https://docs.vllm.ai/en/latest/serving/parallelism_scaling/)
    - 阅读单模型 replica 的 distributed inference strategies、single-node deployment 与通信排障。
    - 先区分模型是否放得下、增加 GPU 的吞吐收益，以及通信成本；本周不要求多节点部署。
 
 ## 需要复用的前置资料
 
-- [Week 4 references](week-04-references.md) #4、#8：CLI 和 engine args；执行时保存固定版本 help/config。
+- [Week 4 references](week-04-references.md) #4、#8–9：CLI、engine args 与 Tuning；只查 chunk budget/preemption 的 A/B 变量，保存固定版本 help/config。
 - [Week 8 references](week-08-references.md) #1、#3：scheduler 源码和 Sarathi-Serve，用于解释 chunking，不将论文等同当前实现。
-- [Week 10 references](week-10-references.md) #2、#4：Model Runner 和 PyTorch graph capture 约束。
+- [Week 10 references](week-10-references.md) #2–4：Model Runner、vLLM CUDA Graph 和 PyTorch capture；只核对 modes、compilation、padding 与显存的混杂因素。
 - [Week 12 references](week-12-references.md) #1–4：launch/graph/communication 的短 timeline 证据。
-- [Week 13 references](week-13-references.md) #1、#4：counter 限制和 prefix caching 对照。
+- [Week 13 references](week-13-references.md) #1：counter 限制；prefix caching 对照直接复用 [Week 13 plan](week-13-plan.md)，不新增阅读。
 - [Week 6 references](week-06-references.md)：复用已验证的参数与量化方法，不新增量化格式。
 
 ## 阅读顺序
 
 | 日期 | 阅读 | 对应任务 |
 |---|---|---|
-| Day 1 | 1，Week 4 #4/#8 | 固定 baseline 和实验变量 |
-| Day 2 | 1，Week 8 #1/#3 | chunk budget sweep |
-| Day 3 | 2，Week 10 #2/#4 | graph-only 与执行模式组合对比 |
-| Day 4–5 | 回看 1–2，Week 12 #1–4 | 组合回归与机制核对 |
-| Day 6 | 3 | 双卡 TP=1/2 对照 |
-| Day 7 | 回看 1–3 | 冻结下一阶段 baseline |
+| Day 1 | 复用 Week 4 #4/#8/#9 | 固定 baseline 和实验变量 |
+| Day 2 | 复用 Week 4 #9、Week 8 #1/#3 | chunk budget sweep |
+| Day 3 | 复用 Week 10 #2–4 | graph-only 与执行模式组合对比 |
+| Day 4–5 | 复用 Week 4 #9、Week 10 #3、Week 12 #1–4 | 组合回归与机制核对 |
+| Day 6 | 1 | 双卡 TP=1/2 对照 |
+| Day 7 | 回看 1 和本周实验结果 | 冻结下一阶段 baseline |
 
 ## 阅读后的自测问题
 
