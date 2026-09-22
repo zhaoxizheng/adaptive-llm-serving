@@ -1,19 +1,18 @@
-# Cloud-Native LLM Serving: 26-Week Learning Roadmap
+# Cloud-Native LLM Serving: 24-Week Learning Roadmap
 
 A hands-on project that starts with measured single-GPU autoregressive inference,
 progresses through vLLM internals and multi-replica serving, and then builds a
 cloud-provider-neutral serving path around Kubernetes Gateway API, Gateway API
-Inference Extension (GAIE), llm-d, and vLLM. The final block compares Kubernetes
-workload abstractions for multi-node inference instead of assuming one platform is
-the universal answer.
+Inference Extension (GAIE), llm-d, and vLLM. The final block runs vLLM across
+multiple nodes with native multiprocessing, then packages that runtime with
+LeaderWorkerSet and Kueue for scheduling, failure, and operations evidence.
 
 The portable data-plane baseline is `Gateway`/`HTTPRoute` + `InferencePool` + an
 llm-d Endpoint Picker (EPP) + vLLM. HPA or KEDA supplies the primary autoscaling
-path; KServe is evaluated as an optional declarative control plane. AIBrix gateway
-and autoscaling remain outside the 26-week core; Week 26 only maps its optional
-`RayClusterFleet` abstraction after the direct LeaderWorkerSet and KubeRay paths.
+path; KServe is evaluated as an optional declarative control plane. Weeks 23–24
+extend the same vLLM runtime into a Kubernetes-native multi-node operations path.
 
-Start with the [26-week learning roadmap](docs/learning-roadmap.md), then use the
+Start with the [24-week learning roadmap](docs/learning-roadmap.md), then use the
 weekly execution plans and reading lists:
 
 - [Week 1 execution plan](docs/week-01-plan.md) and [references](docs/week-01-references.md)
@@ -40,10 +39,8 @@ weekly execution plans and reading lists:
 - [Week 22 execution plan](docs/week-22-plan.md) and [references](docs/week-22-references.md)
 - [Week 23 execution plan](docs/week-23-plan.md) and [references](docs/week-23-references.md)
 - [Week 24 execution plan](docs/week-24-plan.md) and [references](docs/week-24-references.md)
-- [Week 25 execution plan](docs/week-25-plan.md) and [references](docs/week-25-references.md)
-- [Week 26 execution plan](docs/week-26-plan.md) and [references](docs/week-26-references.md)
 
-### Weeks 16–26 Overview
+### Weeks 16–24 Overview
 
 Week numbers are prerequisite-based milestones, not calendar dates. The roadmap
 does not imply that earlier weeks are complete. Start each milestone only when its
@@ -59,10 +56,8 @@ with incomparable CPU results. Each week budgets about 11 hours.
 | 20 | HPA/KEDA autoscaling and observability | Metric contract, cold-start/failure timelines, and allocated/billed GPU-hours; WVA optional |
 | 21 | Cloud implementation mapping and portability | GKE live run plus evidence-backed mappings for other providers |
 | 22 | Capstone: held-out, failure, rollout, and runbook | Repeated A/B results, fault matrix, compatibility table, and rollback runbook |
-| 23 | Multi-node vLLM and runtime contract | TP/PP/DP/EP runtime and communication decision table |
-| 24 | LeaderWorkerSet + Kueue | Group lifecycle, gang admission, topology, and recovery evidence |
-| 25 | Ray + KubeRay | `RayService`, placement-group, and Kubernetes/runtime state evidence |
-| 26 | Same-hardware LWS vs KubeRay ADR | Lifecycle/cost decision; optional `RayClusterFleet` manifest mapping |
+| 23 | vLLM native multiprocessing multi-node | TP/PP/DP/EP runtime, rank, launch, and communication contract |
+| 24 | LeaderWorkerSet + Kueue operations handoff | Gang admission, topology placement, failure recovery, and final multi-node runbook |
 
 ### API, Cloud, and Evidence Boundaries
 
@@ -82,7 +77,7 @@ with incomparable CPU results. Each week budgets about 11 hours.
 - Weeks 1–14 use the single NVIDIA L4 baseline. Week 15 and performance cells in
   Weeks 16–22 require two independently schedulable, same-model GPU slots. A CPU
   cluster may validate CRDs and reconciliation only.
-- Weeks 23–26 require at least two same-zone GPU nodes for the mandatory
+- Weeks 23–24 require at least two same-zone GPU nodes for the mandatory
   multi-node lifecycle experiments. L4 over ordinary cloud TCP is useful for
   correctness and orchestration evidence, not production collective-performance
   claims.
@@ -207,7 +202,7 @@ Do not compare runs across different GPU models as if they were controlled resul
 benchmark/           Workload definitions, runners, and analysis
 configs/             Versioned experiment configurations
 dashboards/          Cross-layer observability views
-deploy/              vLLM, Gateway/GAIE, llm-d, autoscaling, LWS, and KubeRay manifests
+deploy/              vLLM, Gateway/GAIE, llm-d, autoscaling, LWS, and Kueue manifests
 docs/                Weekly plans/references, architecture, portability, and ADRs
 reports/             Written experiment conclusions and runbooks
 results/             Raw records, timelines, and environment manifests by week

@@ -56,7 +56,7 @@
     - 阅读 Abstract、Introduction 和 PagedAttention 的核心图。
     - 本周目标是解释 vLLM 为何能更灵活地管理 KV cache，不要求推导 kernel。
 
-Orca 复用 Week 3 Reference #4；vLLM 仓库在 Week 7 开始源码阅读时再列入，不提前重复。
+Orca 复用 Week 3 Reference #3；vLLM 仓库在 Week 7 开始源码阅读时再列入，不提前重复。
 
 ## 阅读顺序
 
@@ -66,7 +66,7 @@ Orca 复用 Week 3 Reference #4；vLLM 仓库在 Week 7 开始源码阅读时再
 | Day 2 | 2、3 | offline / streaming smoke |
 | Day 3 | 5–7 | benchmark 与 metrics |
 | Day 4–6 | 8–10 | 参数 sweep 和 prefix caching |
-| Day 7 | 11，并复用 Week 3 #4 | 解释结果和 Week 3 A/B |
+| Day 7 | 11，并复用 Week 3 #3 | 解释结果和 Week 3 A/B |
 
 ## 阅读后的自测问题
 

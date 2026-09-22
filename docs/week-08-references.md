@@ -22,7 +22,7 @@ Engine Arguments 与 Optimization and Tuning 复用 Week 4 Reference #8 和 #9�
    - 阅读 chunked-prefills、stall-free scheduling 和主要实验结论。
    - 区分论文设计与当前 vLLM 固定版本的具体实现。
 
-Iteration-level scheduling 复用 Week 3 Reference #4；PagedAttention 复用 Week 4 Reference #11。
+Iteration-level scheduling 复用 Week 3 Reference #3；PagedAttention 复用 Week 4 Reference #11。
 
 ## 选读：调度与服务目标
 
@@ -35,7 +35,7 @@ Iteration-level scheduling 复用 Week 3 Reference #4；PagedAttention 复用 We
 | 日期 | 阅读 | 对应任务 |
 |---|---|---|
 | Day 1 | 1–2，并复用 Week 4 #8/#9 | scheduler source map 与配置 |
-| Day 2 | 3，并复用 Week 3 #4、Week 4 #11 | iteration scheduling 和 chunked prefill |
+| Day 2 | 3，并复用 Week 3 #3、Week 4 #11 | iteration scheduling 和 chunked prefill |
 | Day 3 | 回看 1–2 | KV allocation 与 preemption 入口 |
 | Day 4–6 | 4，反复对照 1 | instrumentation 与 scenarios |
 | Day 7 | 复用 Week 2 #3 | 内部机制与 SLO 关联 |

@@ -14,23 +14,19 @@
    - 重点读 dynamic batcher 的 preferred batch size、maximum queue delay 和 queue policy。
    - 将 Triton 的配置概念映射到本周 `max_batch_size`、`max_wait_ms` 和 admission policy。
 
-3. [Ray Serve: Dynamic Request Batching](https://docs.ray.io/en/latest/serve/advanced-guides/dyn-req-batch.html)
-   - 观察 batch decorator、最大 batch size 和 batch wait timeout 如何分离。
-   - 重点理解“等待更多请求”是显式 latency-throughput trade-off。
-
 ## 必读：LLM Scheduling 与尾延迟
 
-4. [Orca: A Distributed Serving System for Transformer-Based Generative Models](https://www.usenix.org/conference/osdi22/presentation/yu)
+3. [Orca: A Distributed Serving System for Transformer-Based Generative Models](https://www.usenix.org/conference/osdi22/presentation/yu)
    - 阅读 Abstract、Introduction 和 iteration-level scheduling。
    - 回答为什么一个请求完成后，传统 request-level batch 不能立即用新请求填充空位。
 
-5. [The Tail at Scale](https://research.google/pubs/the-tail-at-scale/)
+4. [The Tail at Scale](https://research.google/pubs/the-tail-at-scale/)
    - 重点建立 tail latency 直觉：平均值正常并不代表用户体验稳定。
    - 本周把这种直觉落实到 P95/P99、queue depth 和 rejection rate。
 
 ## 衔接 Week 4
 
-6. [vLLM Documentation](https://docs.vllm.ai/en/latest/)
+5. [vLLM Documentation](https://docs.vllm.ai/en/latest/)
    - 浏览首页的 Serving、Benchmarking 和 Design 信息结构。
    - 不要开始逐文件读 scheduler 源码；Week 4 先把 vLLM 当作服务使用。
 
@@ -40,10 +36,10 @@ SLO/goodput 定义复用 Week 2 Reference #3；`bench serve` 在 Week 4 首次�
 
 | 日期 | 阅读 | 对应任务 |
 |---|---|---|
-| Day 1 | 1–3 | 队列、flush 和 overload contract |
-| Day 2 | 4–5 | continuous batching 与尾延迟直觉 |
+| Day 1 | 1–2 | 队列、flush 和 overload contract |
+| Day 2 | 3–4 | continuous batching 与尾延迟直觉 |
 | Day 3–5 | 复用 Week 2 #3 | SLO 指标和 workload 设计 |
-| Day 7 | 6 | 为 vLLM Week 4 建立文档地图 |
+| Day 7 | 5 | 为 vLLM Week 4 建立文档地图 |
 
 ## 阅读后的自测问题
 

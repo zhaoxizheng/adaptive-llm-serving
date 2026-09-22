@@ -19,7 +19,7 @@
 - 单卡主线固定 Week 13 的硬件、模型、dtype、backend 和 arrival trace。
 - 每组实验只改变一个主变量，候选确定后才做组合回归。
 - Quantization 复用 Week 6 已验证结论，本周不再引入新量化格式。
-- 不实现新 scheduler、kernel 或多节点 TP；不开始 AIBrix。
+- 不实现新 scheduler、kernel 或多节点 TP；不进入集群级网关/路由。
 - 所有容量、延迟和成本结论来自无 profiler runs；短 profiling 仅解释差异。
 
 ## 本周最终产出

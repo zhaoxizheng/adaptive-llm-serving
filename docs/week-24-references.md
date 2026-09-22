@@ -61,12 +61,12 @@
 | Day 4 | 5–7 的 topology 部分 | TAS required 可行/不可行 |
 | Day 5 | 7 的 preferred 语义 | 负向对照与实际 placement |
 | Day 6 | 4 | Leader/worker failure handling |
-| Day 7 | 回看 1–7 和 events | 四层状态机与 Week 25 handoff |
+| Day 7 | 回看 1–7、events 与固定版本 schema | 四层状态机、最终跨节点运维 handoff 与收尾 |
 
 ## 阅读后的自测问题
 
 1. `spec.replicas` 与一个 replica group 内的总 Pod 数有什么差别？
-2. LWS 管理了哪些生命周期，又为什么没有替代 vLLM distributed executor？
+2. LWS 管理了哪些生命周期，又为什么没有替代 vLLM native multiprocessing runtime？
 3. Kueue admission、Kubernetes Pod scheduling 和 application readiness 为什么是三个状态？
 4. 配额总量足够时，为什么 required topology 仍可能无法准入完整 group？
 5. `required` 与 `preferred` topology 失败时应分别出现什么行为？

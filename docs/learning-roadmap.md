@@ -1,6 +1,6 @@
 # Learning Roadmap: 从 vLLM 到 Cloud-Native LLM Serving
 
-> 目标：用 26 周、通常每周约 10–12 小时，从理解单机 LLM 推理逐步过渡到云厂商通用的 Kubernetes 推理服务架构，并完成一个以 vLLM、Gateway API、Gateway API Inference Extension（GAIE）和 llm-d 为可移植主线的可复现项目。Prometheus 与 Kubernetes 作为已掌握的基础设施直接使用，不再安排基础学习。
+> 目标：用 24 周、通常每周约 10–12 小时，从理解单机 LLM 推理逐步过渡到云厂商通用的 Kubernetes 推理服务架构，并完成一个以 vLLM、Gateway API、Gateway API Inference Extension（GAIE）和 llm-d 为可移植主线的可复现项目。Prometheus 与 Kubernetes 作为已掌握的基础设施直接使用，不再安排基础学习。
 
 ## 路线总览
 
@@ -19,7 +19,7 @@
     ↓
 验证扩缩容、云可移植性与故障语义
     ↓
-比较多节点 vLLM 的 LWS 与 KubeRay 路径
+完成 vLLM 原生多进程多节点运行与 LWS + Kueue 运维交接
 ```
 
 最终项目：
@@ -428,8 +428,6 @@ HPA or KEDA ── metrics contract ──→ replica count
 Optional control plane: KServe LLMInferenceService
 ```
 
-AIBrix gateway/autoscaling is unscheduled future work rather than a Capstone cell. Week 26 only permits an optional, non-performance `RayClusterFleet` manifest mapping after the direct LWS/KubeRay evidence is complete.
-
 ### 实验矩阵
 
 | 版本 | Endpoint selection | 扩缩容 | 目的 |
@@ -460,31 +458,25 @@ AIBrix gateway/autoscaling is unscheduled future work rather than a Capstone cel
 
 本阶段的外部资料只在 weekly references 首次编号：见 [Week 19 references](week-19-references.md)、[Week 20 references](week-20-references.md)、[Week 21 references](week-21-references.md) 和 [Week 22 references](week-22-references.md)。
 
-## 第八阶段：多节点 vLLM 与 Kubernetes Workload 决策（第 23–26 周）
+## 第八阶段：多节点 vLLM 与 Kubernetes 运维交接（第 23–24 周）
 
 ### 每周主线
 
-- Week 23：vLLM 多节点并行与 Runtime Contract；冻结 TP/PP/DP/EP 与 runtime backend 边界，2 nodes × 1 L4 只做功能 smoke，高速网络/多卡满足门槛后才做性能结论（[计划](week-23-plan.md) / [资料](week-23-references.md)）。
-- Week 24：LeaderWorkerSet + Kueue 的 gang admission 与拓扑调度；验证 LWS group lifecycle/failure semantics，以及 Kueue all-or-nothing admission 和 topology-aware scheduling（[计划](week-24-plan.md) / [资料](week-24-references.md)）。
-- Week 25：Ray + KubeRay 的 `RayService` 生命周期与 placement group；验证跨节点 vLLM、runtime bundle 调度，并证明 Kueue admission 不等于 Ray placement group 已满足（[计划](week-25-plan.md) / [资料](week-25-references.md)）。
-- Week 26：同硬件 LWS vs KubeRay ADR 与多节点验证；固定 vLLM image、模型、GPU、workload 和 fault injection，比较生命周期、恢复、升级、调试面与成本（[计划](week-26-plan.md) / [资料](week-26-references.md)）。
+- Week 23：vLLM native multiprocessing 多节点并行与 Runtime Contract；冻结 TP/PP/DP/EP、进程启动、rank mapping、通信和 shutdown 边界，2 nodes × 1 L4 只做功能 smoke，高速网络/多卡满足门槛后才做性能结论（[计划](week-23-plan.md) / [资料](week-23-references.md)）。
+- Week 24：LeaderWorkerSet + Kueue 的 gang admission、拓扑调度、故障恢复与最终 multi-node operations handoff；验证 LWS group lifecycle/failure semantics、Kueue all-or-nothing admission 和 topology-aware scheduling，并交付可重复的部署、恢复、升级、观测和成本 runbook（[计划](week-24-plan.md) / [资料](week-24-references.md)）。
 
 ### 分层模型
 
 ```text
-vLLM
-└── 单模型副本内的 TP / PP / DP / EP 与 worker runtime
+vLLM native multiprocessing
+└── 单模型副本内的 TP / PP / DP / EP、进程启动、rank mapping 与通信
 
-Kubernetes workload path A
-├── LeaderWorkerSet：leader + workers 组成复制单元
-└── Kueue：admission、gang 与 topology-aware scheduling
-
-Kubernetes workload path B
-├── KubeRay：RayCluster / RayService 生命周期
-└── Ray placement group：Ray runtime 内的 actor/bundle placement
+Kubernetes workload path
+├── LeaderWorkerSet：leader + workers 组成复制单元并定义 group lifecycle
+└── Kueue：all-or-nothing admission、gang 与 topology-aware scheduling
 ```
 
-LWS 不替代 vLLM 所需的 distributed runtime；KubeRay 与 LWS 比较的是 Kubernetes 上的集群/副本生命周期建模。Kueue 解决 Kubernetes admission 与 topology placement，Ray placement group 解决 Ray 集群内部资源预留，两者是不同状态机。AIBrix `RayClusterFleet` 只在 Week 26 用 1–1.5 小时做 optional manifest mapping，不作为第三条通用必修路径。
+LWS 不替代 vLLM 的 distributed runtime；它负责把 leader 与 workers 建模为一个 Kubernetes workload group。Kueue 在这一层提供 admission 与 topology placement。Week 23 冻结进程级 runtime contract，Week 24 只改变 Kubernetes workload 与调度层，并把验证结果收敛为最终 multi-node operations handoff。
 
 ### 硬件与结论门槛
 
@@ -496,12 +488,13 @@ LWS 不替代 vLLM 所需的 distributed runtime；KubeRay 与 LWS 比较的是 
 ### 阶段验收
 
 - [ ] 能区分模型因单卡放不下而分片、为吞吐复制 engine，以及 Kubernetes 如何把这些进程组织成工作负载。
+- [ ] vLLM native multiprocessing 有可复现的 launch、rank mapping、通信、health check 与 shutdown 证据。
 - [ ] LWS + Kueue 有 group identity、all-or-nothing admission、topology 和 group recovery 证据。
-- [ ] KubeRay 有 `RayService` → Serve replica → vLLM engine → GPU worker 的请求/状态链路证据。
-- [ ] Week 26 在同硬件、同镜像、同 workload 下完成 LWS/KubeRay ADR，覆盖 scheduling、failure、upgrade、observability 与成本，而非只比较吞吐。
-- [ ] 选择规则可审计：Kubernetes-native 跨 Pod 副本优先评估 LWS；依赖 Ray actor/Serve/placement 时评估 KubeRay；只有既定 AIBrix 平台需要其 rollout abstraction 时才评估 `RayClusterFleet`。
+- [ ] Week 24 在固定硬件、镜像和 workload 下完成 scheduling、failure、upgrade、observability 与成本验证，而非只比较吞吐。
+- [ ] 最终 handoff 包含部署、排障、节点故障恢复、受控升级、回滚和停止计费资源的可执行 runbook。
+- [ ] 职责边界可审计：vLLM native multiprocessing 管理模型进程与通信，LWS 管理 workload group lifecycle，Kueue 管理 admission 与 topology placement。
 
-本阶段资料入口见 [Week 23 references](week-23-references.md)、[Week 24 references](week-24-references.md)、[Week 25 references](week-25-references.md) 和 [Week 26 references](week-26-references.md)。
+本阶段资料入口见 [Week 23 references](week-23-references.md) 和 [Week 24 references](week-24-references.md)。
 
 ## 推荐仓库结构
 
@@ -515,7 +508,7 @@ adaptive-llm-serving/
 │   ├── vllm-request-lifecycle.md
 │   ├── experiment-methodology.md
 │   ├── cloud-portability.md
-│   ├── multi-node-adr.md
+│   ├── multi-node-operations.md
 │   └── results.md
 ├── deploy/
 │   ├── vllm/
@@ -525,9 +518,8 @@ adaptive-llm-serving/
 │   ├── kserve/
 │   ├── autoscaling/
 │   ├── lws/
-│   ├── kuberay/
+│   ├── kueue/
 │   ├── providers/
-│   ├── optional-aibrix/
 │   └── monitoring/
 ├── benchmark/
 │   ├── workloads/
@@ -561,13 +553,13 @@ make report
 - [ ] 关联 Gateway、EPP、vLLM 与 autoscaler 的 dashboard
 - [ ] Service/RR、reference EPP、llm-d routing 与选定 autoscaler 的最小消融
 - [ ] GKE 实跑证据与 Azure/ACK/AWS capability mapping
-- [ ] LWS 与 KubeRay 的同硬件 ADR
+- [ ] vLLM native multiprocessing 多节点证据与 LWS + Kueue operations handoff
 - [ ] profiling 截图或 timeline
 - [ ] 失败、blocked/deferred 实验和设计取舍记录
 - [ ] deployment、rollback 与故障恢复 runbook
 - [ ] 3–5 分钟演示视频
 - [ ] 一篇技术文章
-- [ ] 最好完成一个 vLLM、Gateway API/GAIE、llm-d、KServe、LWS 或 KubeRay 上游贡献
+- [ ] 最好完成一个 vLLM、Gateway API/GAIE、llm-d、KServe、LWS 或 Kueue 上游贡献
 
 ## 简历描述模板
 
@@ -575,7 +567,7 @@ make report
 
 多节点实验完成后可增加：
 
-> Compared LeaderWorkerSet/Kueue and KubeRay/RayService for multi-node vLLM on identical hardware, documenting gang admission, topology placement, failure recovery, rollout behavior, and operational cost in an architecture decision record.
+> Ran multi-node vLLM with native multiprocessing, then operationalized it with LeaderWorkerSet and Kueue, documenting gang admission, topology placement, failure recovery, controlled upgrades, rollback, observability, and cost in a reproducible operations handoff.
 
 实验完成后，补上实际提升数字和实验条件。
 
@@ -583,7 +575,7 @@ make report
 
 1. 不花两个月从零复刻 vLLM；Mini Engine 只用于建立性能直觉。
 2. 不把最终项目做成纯 Kubernetes 部署；必须包含推理指标、请求归属、策略、故障和对照实验。
-3. 先验证标准 `Gateway`/`HTTPRoute`/`InferencePool` contract，再比较实现；不把 AIBrix 或 KServe 私有 API 当作云通用基线。
+3. 先验证标准 `Gateway`/`HTTPRoute`/`InferencePool` contract，再比较实现；不把实现私有 API 当作云通用基线。
 4. 每个性能结论必须记录硬件、模型、软件版本、参数和 workload。
 5. 先建立正确且可复现的 baseline，再进行优化。
 6. 每个实验只改变一个主要控制面变量；routing、autoscaling 和多节点 workload lifecycle 分阶段验证。
@@ -593,9 +585,9 @@ make report
 
 ## 时间调整
 
-- 每周约 5 小时：将 26 周路线延长到约 12–13 个月；保持前置关系，不把两个 GPU-heavy milestone 硬塞进同一周。
+- 每周约 5 小时：将 24 周路线延长到约 11–12 个月；保持前置关系，不把两个 GPU-heavy milestone 硬塞进同一周。
 - 当前精简版已假设熟悉 Prometheus 与 Kubernetes：第五阶段从 3 周压缩到 1 周，Week 5 只保留 vLLM metric contract 与实验对齐。
 - GPU quota 暂缺：继续做源码阅读、manifest、schema/object graph、离线分析和 provider mapping；任何性能 cell 保持 blocked，拿到相同 GPU 条件后再补跑。
-- 高速多节点资源暂缺：Week 23–26 先完成 correctness、调度、failure 和 ADR 框架，TP/EP collective 性能延后，不阻塞前 22 周 capstone 收尾。
+- 高速多节点资源暂缺：Week 23–24 先完成 correctness、调度、failure 和 operations handoff，TP/EP collective 性能延后，不阻塞前 22 周 capstone 收尾。
 - 目标偏 CUDA/Kernel：增加 Triton、CUDA 和算子 profiling，减少 provider mapping 深度，但保留标准网关 contract。
-- 目标偏 AI Infra/Serving：保持当前比重，重点打磨 EPP、扩缩容、可观测性、故障实验和 LWS/KubeRay 决策证据。
+- 目标偏 AI Infra/Serving：保持当前比重，重点打磨 EPP、扩缩容、可观测性、故障实验和 LWS + Kueue 运维证据。

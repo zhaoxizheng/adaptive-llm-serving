@@ -21,7 +21,7 @@
 - 只改变少数关键参数：`max-model-len`、`gpu-memory-utilization`、`max-num-seqs` 和 `max-num-batched-tokens`。
 - prefix caching 只做一个隔离的小实验，不混入主基线。
 - 不读完整 scheduler、KV cache manager 或 CUDA kernel；源码阅读从 Week 7 开始。
-- 不引入 Kubernetes、AIBrix、多 GPU 或多 replica。
+- 不引入容器编排、集群级网关或路由、多 GPU 或多 replica。
 
 ## 本周最终产出
 

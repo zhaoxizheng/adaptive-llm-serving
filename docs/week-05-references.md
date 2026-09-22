@@ -16,7 +16,7 @@
 
 ## SLO 与 Goodput 背景
 
-vLLM Metrics 与 `bench serve` 分别复用 Week 4 Reference #7 和 #5。Goodput 复用 Week 2 Reference #3，tail latency 复用 Week 3 Reference #5。
+vLLM Metrics 与 `bench serve` 分别复用 Week 4 Reference #7 和 #5。Goodput 复用 Week 2 Reference #3，tail latency 复用 Week 3 Reference #4。
 
 ## 阅读顺序
 
@@ -24,7 +24,7 @@ vLLM Metrics 与 `bench serve` 分别复用 Week 4 Reference #7 和 #5。Goodput
 |---|---|---|
 | Day 1 | 1，并复用 Week 4 #5/#7 | metric inventory 与 benchmark contract |
 | Day 2 | 2 | GPU 观测接入 |
-| Day 3–5 | 复用 Week 2 #3、Week 3 #5 | SLO、goodput 与 capacity sweep |
+| Day 3–5 | 复用 Week 2 #3、Week 3 #4 | SLO、goodput 与 capacity sweep |
 | Day 6–7 | 回看 1 | 查询复核与报告 |
 
 ## 阅读后的自测问题

@@ -22,7 +22,7 @@
 - Prometheus、PromQL、Grafana 和告警基础视为已掌握，只做 vLLM metric discovery 与 run-level 对齐。
 - Grafana 用于观察和复核；正式结论必须能够从保存的原始结果与 Prometheus 查询重建。
 - GPU utilization 只能说明设备忙碌程度，不能单独证明 scheduler 或 kernel 是瓶颈。
-- 不引入 Kubernetes、多 replica、AIBrix 或公网 load balancer。
+- 不引入容器编排、多 replica 或集群级网关/路由，也不开放公网 load balancer。
 
 ## 本周最终产出
 

@@ -221,7 +221,7 @@ make test PYTHON=.venv/bin/python
 
 ## 本周不要做什么
 
-- 不引入 vLLM、Kubernetes 或 AIBrix。
+- 不引入生产级推理服务框架、容器编排或集群级路由。
 - 不同时比较多个模型或 GPU。
 - 不把不同 prompt 长度混在同一个静态 batch 中做正式结论。
 - 不通过重复相同 prompt 冒充真实 batch，而不在报告中说明。
