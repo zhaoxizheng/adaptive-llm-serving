@@ -1,130 +1,116 @@
-# Week 16 Plan: AIBrix 架构、Gateway 与首组路由对照
+# Week 16 Plan: Gateway API v1 L7 Baseline
 
 > 时间预算：约 11 小时
 >
-> 本周主线：在 Week 15 的双副本 vLLM baseline 上接入 AIBrix，追踪 gateway 到具体 Pod 的请求路径，并完成固定副本的第一组路由对照。
+> 本周主线：在 Week 15 的固定双副本 vLLM baseline 上，用 Gateway API core v1 建立可审计的 L7 matching、traffic splitting、状态与失败语义，为 Week 17 的 InferencePool 数据路径提供稳定对照。
 >
-> 前置：[Week 15 plan](week-15-plan.md) 的部署、workload 和指标基线；阅读：[Week 16 references](week-16-references.md)。下列文件是待完成产出。
+> 前置：[Week 15 plan](week-15-plan.md) 的双副本、request-level attribution 与 streaming baseline；阅读：[Week 16 references](week-16-references.md)。下列文件均为计划产出，不代表仓库中已实现或已经验证。
 
 ## 本周目标
 
-1. 画清 Envoy、gateway plugins、controller、runtime 与 vLLM 的职责边界。
-2. 使用固定 AIBrix release 和兼容的依赖，跑通模型发现及 streaming generation。
-3. 验证实际策略配置，而不只依赖 `routing-strategy` header 名称。
-4. 在同 GPU 预算下比较 random、least-request，并保留 Week 15 RR 外部基线。
-5. 为 Week 17 autoscaling、Week 18 cache-aware routing 明确数据依赖，不提前实现全部功能。
+1. 固定 Gateway API CRD bundle、gateway controller、Kubernetes 与 vLLM 版本，记录实现实际支持的 core v1 能力。
+2. 追踪 `GatewayClass` → `Gateway` → `HTTPRoute` → `Service` → vLLM Pod 的完整请求和状态链路。
+3. 验证 hostname、path/header match 与 weighted `backendRefs` 的 L7 语义，而不只证明 YAML 可被 API server 接受。
+4. 建立 request-to-route-to-backend attribution，验证 SSE streaming、取消、无匹配路由与无效 backend 的行为。
+5. 冻结一套固定双副本 L7 baseline，供 Week 17 的 `InferencePool` 与 EPP 实验复用。
 
 ## 本周边界
 
-- 固定两个 vLLM replicas；关闭实验 workload 的 HPA/PodAutoscaler，不让副本数变化干扰路由结论。
-- 复用模型、dtype、engine args 和合成 workload，不同时升级后端模型或 GPU。
-- 暂不启用 distributed KV transfer、PD disaggregation、GPU optimizer、LoRA 或自定义路由。
-- 本周只梳理 autoscaler 与 KV event 契约；实际优化分别留到 Week 17–18。
-- AIBrix 需要 Envoy Gateway；是否需要其他组件按所选 release 和工作负载核对，不默认安装整套可选组件。
+- 只使用 `gateway.networking.k8s.io/v1` 的 core 资源和 `HTTPRoute` 主路径；不接入 GAIE、`InferencePool`、EPP 或 llm-d。
+- Gateway API core v1 表示 API 的稳定边界，不表示每个 controller 都支持规范中的全部可选能力、filter 或一致行为；实现支持度必须由固定 release 的 conformance 声明、status 和 runtime 证据共同确认。
+- 固定两个同型号 L4 GPU slots、两个独立 vLLM replicas、模型/revision、engine args 与 workload；关闭 HPA/其他 autoscaler。
+- 所有 cross-namespace 引用先排除，backend 与 route 放在同一实验 namespace，避免把 `ReferenceGrant` 变量混入本周。
+- 不比较 GAIE 或自定义调度算法，不实现 retry policy、鉴权平台或多租户治理；只记录 controller 的现有默认值。
+- 仅在独立实验集群使用合成请求。入口默认 private/internal；不把未鉴权的模型 endpoint 暴露到公网。
 
 ## 本周最终产出
 
-- `deploy/aibrix/`：固定 release、image digests、安装依赖和模型 discovery 配置。
-- `configs/week16-routing.yaml`：策略、global/model/request override、load gates 与 workload。
-- `docs/aibrix-request-path.md`：组件边界、请求时序图与固定源码 permalink。
-- `scripts/run_week16_routing.sh`：smoke、固定副本策略 A/B 和结果导出。
-- `results/week16/`：request-to-Pod attribution、逐副本指标、raw benchmark 与配置快照。
-- `reports/week16.md`：首组路由对比、兼容性问题和 Week 17–18 handoff。
+- `deploy/gateway-api/`：固定 CRD/controller release、image digests、`GatewayClass`、`Gateway`、`HTTPRoute` 与两个 backend Services。
+- `configs/week16-l7-matrix.yaml`：hostname、path/header match、权重、workload、SLO 和失败用例。
+- `docs/gateway-api-contract.md`：资源关系、status/condition、实现支持矩阵与请求时序图。
+- `scripts/run_week16_gateway.sh`：preflight、apply/dry-run、smoke、L7 matrix 与结果导出入口。
+- `results/week16/`：资源快照、conditions、request attribution、逐 backend 计数和 raw benchmark。
+- `reports/week16.md`：标准语义、实现差异、性能开销、失败行为与 Week 17 handoff。
 
-## Day 1 必须冻结的 Compatibility Matrix
+## Version 与 Capability Contract
 
-| 层 | 记录项 |
+| 层 | Day 1 必须冻结或验证的内容 |
 |---|---|
-| 集群 | Kubernetes、GPU device plugin、driver、GPU 型号和网络入口 |
-| vLLM | image digest、commit/version、模型/revision、served model name、CLI/config |
-| AIBrix | release/commit、CRDs、gateway/controller/runtime images |
-| 依赖 | Envoy Gateway 与 Gateway API 版本、所需存储/缓存组件 |
-| 发现契约 | model labels、Service、HTTPRoute、model name 和 port 的对应关系 |
-| 指标契约 | 来源、字段、单位、Pod identity、刷新周期和 stale/missing 处理 |
+| 集群 | Kubernetes 版本、context、节点/GPU、namespace 与网络入口 |
+| Gateway API | CRD bundle/release、`gateway.networking.k8s.io/v1` schema 与安装来源 |
+| 实现 | controller/gateway data-plane release、image digest、GatewayClass controller name 与实现声明的支持面 |
+| 路由 | listeners、hostnames、`parentRefs`、matches、filters、`backendRefs`、port 与 weights |
+| 后端 | Service selector/endpoints、Pod UID、served model name、readiness 与 target port |
+| 测量 | request ID、matched route/rule、backend Pod、upstream attempts、status、TTFT/TPOT 与取消 |
 
-官方 `latest` 只用于导航，示例版本不自动等于本实验兼容版本。若所选 release 要求更换 vLLM，先在新后端重新跑 Week 15 baseline；不能把后端升级收益归因给 AIBrix。
+规范页面的 `latest` 用于学习，不是实验版本。执行前固定一套相互兼容的 CRDs 与 controller release，先渲染并审查 manifests，再在独立集群应用。若 controller 只部分支持某个字段或 filter，把该 cell 标为 unsupported/blocked；不能因为资源被 API server 接受就写成已实现。
 
-安装限定在独立实验集群；namespace 不能隔离 cluster-scoped CRDs/controllers 的影响。先核对 kube context、渲染并审查 manifests，再执行安装；不把公网未鉴权 quickstart 当作安全默认值。
-
-## 请求链路
+## L7 Routing Contract
 
 ```text
-Client → Envoy Gateway → gateway plugin / routing decision
-                           ↕ model discovery + cached pod metrics
-                           ↓
-                       selected vLLM Pod → streamed tokens → Client
+Client → Gateway address/listener
+           ↓ hostname + HTTPRoute rule match
+        weighted backendRef
+           ↓
+        Service endpoint → selected vLLM Pod → SSE tokens → Client
 
-Controller → model registration / routes / desired state
-Autoscaler → replica count（本周不启用）
-vLLM scheduler → 当前实例的 token budget 与 KV allocation
+GatewayClass/controller → Gateway programming status
+HTTPRoute parent status  → Accepted / reference resolution evidence
 ```
 
-记录 request ID、selected Pod UID、策略配置、response status、TTFT/TPOT、完成/取消和重试次数。只在短窗口记录必要的 routing decision，正式性能 run 关闭高频调试日志；不记录 prompt 正文或 Authorization header。
-
-## Routing Policy Contract
-
-当前在线文档描述了策略外的 load-imbalance gate 与自动 capacity-aware blending；安装 release 未必相同。固定源码和运行配置后回答：
-
-- 策略来自 request header、model config 还是全局配置，优先级是什么？
-- `random`/`least-request` 是否叠加了其他 score、candidate gate 或 fallback？
-- In-flight 的定义是 gateway active streams、server running requests 还是其他 metric？
-- 指标多旧、缺失时怎样选 Pod，Ready 状态如何传播？
-- 用短 trace 验证选择，不把 response header 中的策略名当作纯算法证明。
-
-仅在固定版本支持并可验证时关闭 blending 来做纯策略 A/B；否则保留完整实际配置，将结果命名为复合策略。不得将 `random` 重命名为 round-robin，也不假设 AIBrix 有与 Week 15 完全等价的 RR 实现。
+- `GatewayClass`、`Gateway` 和 `HTTPRoute` 的 generation、`status.conditions`、observed generation 与 route parent status 必须在发送流量前保存；只看 Pod Running 不足以证明路由生效。
+- 每个请求带无敏感信息的 request ID，并从 gateway access log 或等价 telemetry 关联到 route、backend Service 与 Pod UID；不记录 prompt 正文或 Authorization header。
+- 一次已建立的 SSE response 固定在一个 upstream；取消必须传播。若实现发生 retry，分别记录客户端请求数与 upstream attempts，不能用隐藏 retry 改善成功率。
+- Header/path match 使用互斥的合成标记，避免一个请求同时命中多个实验 rule。无匹配 hostname/path 必须证明没有到达任一模型 Pod，并记录实现返回的实际 status。
+- 权重表示相对流量意图，不承诺短窗口精确比例。预先固定样本量与容差/区间，并同时检查 request count、token load 和失败重试。
+- Invalid backend、端口错误和未就绪 endpoint 要通过 resource status 与请求结果双向验证；不能把所有非 2xx 都归为同一种 gateway failure。
 
 ## 最小实验矩阵
 
-| 路径 | 策略 | 副本数 | 作用 |
-|---|---|---:|---|
-| Week 15 gateway | request-level RR | 2 | 外部系统基线；gateway 开销可能不同 |
-| AIBrix gateway | random（记录附加机制） | 2 | 同一 gateway 的对照 |
-| AIBrix gateway | least-request（记录附加机制） | 2 | 同一 gateway 下的策略对比 |
+| Cell | L7 配置 | 固定后端 | 回答的问题 |
+|---|---|---|---|
+| A | 直连单个 vLLM Service | 1 replica | 客户端与 engine 的非 gateway smoke 参考，不作同路径算法 A/B |
+| B | 单一 `HTTPRoute`，100/0 | 2 replicas | Listener、route、backend 与 streaming 链路是否可追踪 |
+| C | 同一路由，50/50 weighted backends | 2 replicas | 请求级分流与实现默认行为是否符合 contract |
+| D | 同一路由，90/10 weighted backends | 2 replicas | 权重变化是否反映在足够样本的实际选择中 |
+| E | 互斥 path/header matches | 2 replicas | L7 rule 优先级与归属能否由 runtime 证据确认 |
+| F | 无匹配 route / invalid backend | 2 replicas | status、错误分类与 backend 零命中的失败语义 |
 
-- 使用 uniform、long/short mixed、shared-prefix 三类固定 trace，低负载与 near-SLO 两档；burst 只作 smoke，不同时研究 autoscaling。
-- 每个正式 cell 至少三个重复，策略交错运行；每次使用一致 cache 冷/暖流程。
-- AIBrix 内部 A/B 才能较好隔离策略差异；对 Week 15 RR 的结果描述为整体路径变化，不把全部差异归因路由算法。
-- Shared-prefix 只观察 locality 丢失，不在本周开启 prefix routing；命中率改善不是预设结论。
-- 保存 overall 和 short/long 分组 TTFT、TPOT、goodput、error rate、逐副本 request/token load、queue/KV 与 gateway CPU/latency。
-- 验证 streaming 不缓冲、client cancellation、unknown model 的明确错误以及一个副本退出后的新请求路由。
+- B–E 使用同一 gateway、模型、replicas、连接策略和固定请求 trace；每个正式 cell 至少三个独立重复并交错执行。
+- 以 uniform-short 为主矩阵，用一小组 long SSE 做 streaming/cancellation smoke；cache-aware workload 留到 Week 18。
+- 在低负载先验证语义，再在低于 Week 15 饱和点的固定负载测量 gateway 增量；不在本周寻找最大容量。
+- 保存 gateway CPU/memory、route latency、客户端 TTFT/TPOT、error/timeout 与逐 Pod request/token load；确认 load generator 和 gateway 未先饱和。
+- 若实现无法给出 route/backend 归属，使用受控 backend identity response 或短窗口 access log 补证据，并在正式性能 run 关闭高频 debug。
 
 ## 每日安排
 
 | 日期 | 预算 | 任务与产出 |
 |---|---:|---|
-| Day 1 | 1.5 h | 阅读架构、冻结版本与依赖矩阵，核对独立实验集群 |
-| Day 2 | 2 h | 安装最小必要组件、模型发现、HTTPRoute 状态与 generation/streaming smoke |
-| Day 3 | 1.5 h | 请求到 Pod attribution，追踪实际策略、metrics cache 和 override 优先级 |
-| Day 4 | 2 h | Uniform/mixed 的 random vs least-request 对照，监控 gateway 与后端瓶颈 |
-| Day 5 | 1.5 h | Shared-prefix 对照及必要重复，保留 RR 外部基线 |
-| Day 6 | 1.5 h | 取消、错误、单副本退出 smoke；梳理 autoscaling/KV event 数据契约 |
-| Day 7 | 1 h | 完成请求路径图、报告和 Week 17–18 handoff；同步结果并停止计费资源 |
-
-## Week 17–18 Handoff
-
-| 后续周 | 本周只准备 | 不提前宣称 |
-|---|---|---|
-| Week 17：Inference-aware autoscaling | PodAutoscaler schema、指标来源/刷新、冷启动分解、HPA 对照与 GPU 上限 | 已改善 burst SLO 或成本 |
-| Week 18：Cache-aware routing | tokenization/model identity、prefix key、KV event 的存储/移除、重启和 stale 状态处理 | KV event sync 等同跨节点 KV tensor transfer |
-
-跨版本参数必须在固定 CLI/schema/source 中复核，不把文档里的 KV event 示例直接用于不同 vLLM 版本。
+| Day 1 | 1.5 h | 阅读 core v1 边界，冻结 CRD/controller、capability 与实验资源矩阵 |
+| Day 2 | 1.5 h | 部署最小 GatewayClass/Gateway/HTTPRoute，保存 status 并完成 100/0 streaming smoke |
+| Day 3 | 2 h | 建立 request-to-route/backend/Pod attribution，验证 path/header 与无匹配请求 |
+| Day 4 | 2 h | 运行 50/50、90/10 traffic splitting 主矩阵与独立重复 |
+| Day 5 | 1.5 h | 验证 invalid backend、未就绪 endpoint、取消和实际 retry 行为 |
+| Day 6 | 1.5 h | 补足重复，分析分流区间、gateway 开销与实现支持差异 |
+| Day 7 | 1 h | 完成 contract/报告，冻结 Week 17 baseline；同步结果并停止计费资源 |
 
 ## 报告必须回答的问题
 
-1. 哪个组件选择 Pod，哪个组件决定下一步运行哪些 tokens？
-2. 实际执行的是纯 least-request 还是包含 gate/blending 的复合策略？
-3. 相同 gateway、GPU、cache 状态下，策略差异对哪种 workload 有收益或退化？
-4. Gateway 自身开销和 metrics staleness 是否足以影响结论？
-5. 路由到了 Ready Pod，为什么仍可能 queue 或超 SLO？
-6. 下一步应该优先改路由还是扩缩容，现有证据和未知项分别是什么？
+1. 固定的是哪套 Gateway API CRDs 与哪种 controller/data plane，实际支持面如何证明？
+2. 如何从一次请求关联到 listener、HTTPRoute rule、backend Service 和最终 Pod？
+3. 50/50 与 90/10 的观察分布是否在预设判断范围内，retry 或请求长度是否扭曲结论？
+4. Path/header/hostname 无匹配及 invalid backend 分别产生什么 status 和 runtime 行为？
+5. Streaming、取消与 upstream retry 是否保持 Week 15 的请求语义？
+6. Gateway 路径增加了多少延迟和资源开销，测量是否避开了饱和瓶颈？
+7. 哪些结论属于 Gateway API core v1，哪些只属于本次固定 implementation/release？
 
 ## 完成标准
 
-- [ ] 固定版本矩阵、最小安装与模型 discovery 可复现。
-- [ ] Gateway → selected Pod → streamed response 可按 request ID 追踪。
-- [ ] 实际 routing policy、附加机制、指标来源和失效行为已核实。
-- [ ] 固定双副本 A/B 保留原始数据、样本量、失败和负收益。
-- [ ] 请求路径图区分 controller、router、autoscaler 与 vLLM scheduler。
-- [ ] Streaming、取消、unknown model 和副本退出有 smoke 证据。
-- [ ] Week 17–18 数据依赖和未验证假设清晰，无越界开启功能。
-- [ ] 结果同步、Git commit 与成本记录齐全，检查 GPU/LB/磁盘残余计费。
+- [ ] Day 1 compatibility/capability matrix 含 CRD、controller、images、schema 与实现支持证据。
+- [ ] GatewayClass/Gateway/HTTPRoute 的 generation、conditions 和 parent status 已保存并与 runtime 对齐。
+- [ ] Request ID 可关联 route、backend 与 Pod，SSE streaming/取消没有被静默改写。
+- [ ] 100/0、50/50、90/10 及 path/header cells 使用固定配置、足够样本和至少三个重复。
+- [ ] 无匹配、invalid backend 与未就绪 endpoint 有明确且分开的失败证据。
+- [ ] 报告区分规范稳定性、实现支持度与本次实验结果，不泛化到所有 Gateway API 实现。
+- [ ] Week 17 可复用的 manifests、workload、attribution 和 baseline 已冻结，且仍明确是计划产出直到实际验收。
+- [ ] 结果绑定 Git commit；GPU、LB、磁盘与公网 IP 的残余计费已检查。

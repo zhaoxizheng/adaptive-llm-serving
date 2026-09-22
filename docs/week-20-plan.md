@@ -1,109 +1,127 @@
-# Week 20 Plan: 最小路由策略接入与固定副本 A/B
+# Week 20 Plan: HPA/KEDA 扩缩容与可观测性（WVA 选做）
 
 > 时间预算：约 11 小时
 >
-> 本周主线：将 Week 19 冻结的单一策略接入固定版本 AIBrix，先验证决策、并发和 streaming 行为，再用固定双副本完成小规模 A/B；本周不接入新的扩缩容逻辑。
+> 本周主线：在 Week 19 固定 release 与资源图上，让 HPA 经固定 metrics adapter、KEDA 经 Prometheus scaler 读取同一推理压力语义，分别验证单一副本写入链路、冷启动与成本口径；仅在版本兼容且主矩阵完成后选做 Workload Variant Autoscaler（WVA）。
 >
-> 前置：[Week 19 plan](week-19-plan.md) 的 policy/experiment contract、冻结参数及离线用例；阅读：[Week 20 references](week-20-references.md)。下列文件是待完成产出。
+> 前置：[Week 15 plan](week-15-plan.md) 的 HPA/冷启动基线与 [Week 19 plan](week-19-plan.md) 的 `LLMInferenceService` 资源/ownership contract；阅读：[Week 20 references](week-20-references.md)。下列文件均为计划产出，不代表 autoscaler 已部署或已证明节省成本。
 
 ## 本周目标
 
-1. 在现有 routing extension 中实现一个窄策略，不新建 gateway 或复制完整 AIBrix。
-2. 保证 Ready 候选、metric freshness、取消和错误路径符合 contract。
-3. 验证 metric/index 并发更新下的 snapshot 一致性与资源释放。
-4. 在相同 gateway/GPU/config 下完成 baseline、candidate 和一项消融。
-5. 为 Week 21 的路由 × 扩缩容组合实验留下可重复的版本、测试和测量入口。
+1. 为一个推理压力指标冻结 query、单位、series selection、聚合、freshness 与缺失行为。
+2. 固定 Prometheus adapter 的 query-to-metric mapping 和 API discovery，再在 HPA 与 KEDA 两条互斥路径中确认唯一 replicas writer。
+3. 以相同 vLLM/Gateway/GAIE/模型和 workload 比较固定副本、HPA 与 KEDA。
+4. 验证 metric outage、冷启动、长 stream drain、cooldown 和 scale-to-zero/idle 的真实边界。
+5. 分开报告 allocated GPU-hours 与 billed node/GPU-hours；Pod 缩容不自动等于云账单下降。
+6. 若固定 release 支持 WVA，再选做验证“WVA recommendation → 恰好一个 HPA 或 KEDA actuator pass-through”链路，不替代主矩阵。
 
 ## 本周边界
 
-- 只在本地开发及独立实验集群运行，固定两个同型号 L4 slots、模型、engine config 与 APC。
-- Workload 的 HPA/PodAutoscaler 均不写副本数；不将 autoscaling 混入本周 A/B。
-- 使用 Week 19 已确认的 AIBrix 扩展接口，source patch 绑定 upstream commit；不假设最新文档接口与安装版本相同。
-- 复用既有 metric/index cache，不在每次请求上新增同步 Prometheus 查询、全量扫描或无界队列。
-- 不实现通用 framework、多租户优先级、PD 或 KV transfer；不在看到结果后反复调整冻结参数。
+- 主矩阵只用一种预先校准的指标，不同时搜索多个 PromQL、阈值和窗口。
+- HPA 路径必须通过固定版本的 adapter/provider 将该指标暴露到 `custom.metrics.k8s.io` 或 `external.metrics.k8s.io`，并保存 API discovery、映射规则和 HPA `currentMetrics`；若该链路不可用，HPA 只能降级为 Week 15 CPU baseline，不能声称与 KEDA 做同指标比较。
+- 每个 workload 任一时刻只能有一个 desired-replicas source 和一条 writer path；独立 HPA、KEDA `ScaledObject`、WVA recommendation、GitOps/manual replicas 不得同时竞争。
+- HPA 与 KEDA 改变了控制实现，不能把差异自动归因于“算法更智能”；逐段对齐指标和 scaling behavior。
+- Scale-to-zero/idle 仅在入口、激活指标、模型加载和首请求语义都可验证时做隔离实验，不放入默认 SLO 主矩阵。
+- WVA 是可选路径：若所选 KServe API/WVA/controller 与 HPA/KEDA backend 不兼容，记录 blocker，不升级整套栈来追逐示例。
+- 主实验预留同一 GPU 节点容量以隔离 Pod scaling；节点 autoscaling 与跨云成本优化不在本周范围。
 
 ## 本周最终产出
 
-- `router/policy/`：可复用的决策逻辑、输入约束与测试。
-- 固定 AIBrix checkout 中的最小集成 diff，以及 `docs/routing-policy-contract.md` 中的 upstream commit/patch 记录。
-- `configs/week20-routing.yaml`：baseline、candidate、消融、timeout/freshness 和实验配置。
-- `scripts/run_week20_routing.sh`：构建版本验证、smoke、A/B 与回切 baseline。
-- `results/week20/`：逐请求决策/结果、gateway overhead、错误和重复实验数据。
-- `reports/week20.md`：测试覆盖、固定副本证据、负收益和 Week 21 handoff。
+- `docs/autoscaling-contract.md`：计划记录 metric、target、writer ownership、窗口、fallback、cooldown 和成本口径。
+- `deploy/autoscaling/`：计划保存 Prometheus adapter 配置、互斥的 fixed/HPA/KEDA overlays，以及兼容时的 optional WVA overlay。
+- `configs/week20-autoscaling.yaml`：计划冻结 workload seeds、阈值、min/max、超时、重复数和停止条件。
+- `dashboards/week20-autoscaling.json`：计划提供同一时间轴的 demand、metric、desired/current/Ready、请求 SLO 与资源状态。
+- `scripts/run_week20_autoscaling.sh`：计划执行 ownership preflight、burst/ramp、outage、drain 和恢复。
+- `results/week20/` 与 `reports/week20.md`：计划保存原始时间线、事件、逐请求结果、资源与账单证据。
 
-## 集成 Contract
+## Unique-writer Contract
 
-| 边界 | 必须满足的行为 |
+| 实验模式 | 唯一决策者/写入路径 | 必须禁用或移除 |
+|---|---|---|
+| Fixed | GitOps/manifest 中固定 replicas | HPA、ScaledObject、WVA scaling spec 和其他 controller |
+| HPA | Metrics adapter 暴露同一语义的 custom/external metric；HPA controller 写 scale target | KEDA ScaledObject、WVA、持续覆盖 replicas 的 GitOps/manual loop |
+| KEDA | KEDA 管 0↔1 激活并生成/管理 HPA 完成 1↔N | 独立 HPA、WVA、manual/GitOps replicas writer |
+| Optional WVA + HPA/KEDA actuator | WVA 是 desired replicas 的唯一来源；选一个 actuator 传递 | 另一 actuator、独立 HPA/KEDA formula、固定 replicas |
+
+每次切换先列出 `managedFields`、HPA/ScaledObject/VariantAutoscaling 与 scale target，确认旧对象消失或停止写入，再发流量。`spec.replicas`、`spec.scaling` 若在固定 CRD 中互斥，遵循实际 admission schema；不得绕过校验。移除 `spec.replicas` 或转换为 `spec.scaling` 后，还要验证 KServe reconcile 不再用旧 fixed value 覆盖选定 child scale target。
+
+## Metric 与 Observability Contract
+
+| 维度 | 必须冻结的内容 |
 |---|---|
-| 候选池 | 只选择模型匹配、Ready 且未 draining 的 Pod；最终 dispatch 前遵循框架的状态校验 |
-| 快照 | Pod UID、metric/index timestamp 和一次决策的输入一致，避免读到半更新状态 |
-| 异常输入 | NaN/Inf、缺失/过期值和未知 cache confidence 按 Week 19 contract 处理 |
-| Fallback | 只回到同一合法候选池内的已验证 baseline；无候选明确失败 |
-| Streaming | 一次 SSE 固定 upstream，不把 response buffering、重试或取消语义意外改变 |
-| 超时 | 路由/外部处理有界；服务错误不应绕过鉴权或改路由到任意后端 |
-| 可观测性 | 短 trace 保存 request ID、选择原因和输入时间，不保存 prompt/凭证 |
+| 语义 | 原始 metric、含义、counter/gauge/histogram 类型，以及它是否代表 demand、queue 或 saturation |
+| 选择 | PromQL、labels、model/namespace/Pod identity，防止抓入旧 Pod 或其他 workload |
+| 单位 | requests/tokens、每秒/窗口值、比例 0–1 或百分比 0–100，threshold 与 target 同单位 |
+| 聚合 | sum/avg/max、per-Pod 或 workload total、Ready/缺失 Pod 的分母 |
+| 时间 | scrape、adapter/KEDA polling、HPA sync、freshness、window 与 dashboard query step |
+| API 暴露 | adapter release/image、series/query mapping、APIService health、custom/external metric 名与 HPA `currentMetrics` |
+| 异常 | empty vector、NaN/Inf、Prometheus 失败、stale series 与 fallback；都不能静默当零 |
+| 关联 | request ID/run ID、metric sample、recommendation、desired/current/Ready 和 first successful token |
 
-Envoy external-processing 失败不等于应用 score 缺失。不要为了保持 HTTP 200 开启 fail-open 来绕过必要的路由或安全检查；分别测试 policy fallback 与 ext_proc timeout，并保留失败计数。
+先在固定单副本上用 low/steady/backlog 三段校准，证明查询方向和数量级正确，再冻结 threshold。正式 evaluation 使用不同 seed；dashboard、adapter 和 KEDA 三处 query 必须语义等价，且从 aggregated API 返回值对账到 HPA `currentMetrics`。两条路径的 polling/sync 与 missing-data 机制仍不同，结论只能归因于完整控制路径。
 
-## 测试分层
+## 最小实验矩阵
 
-### 1. 本地确定性测试
+保持同一模型、Gateway/GAIE 路由、image digests、GPU 上限、arrival trace、cache warmup、SLO 和 client timeout。每个正式 cell 至少三个独立重复并交错运行。
 
-- 复用 Week 19 离线用例，验证 Ready 过滤、stale metric、空候选、tie、cache unknown 和 Pod replacement。
-- 校验 score 单位、极端长度、NaN/Inf 和权重边界；token 长度由可信 tokenizer/已有解析结果提供，不信任客户端自报值。
-- Go table tests 覆盖不变量；有界 fuzz 只作用于本地输入转换/决策函数，不对远端服务发送异常流量。
-- 对 metric refresh、cache removal、request cancellation 与并发选择运行 race detector；未被测试的路径不能声称无竞争。
+| 配置 | 副本范围 | 回答的问题 |
+|---|---:|---|
+| Fixed-1 / Fixed-2 | 1 / 2 | 无控制延迟和预热容量上下界 |
+| HPA + metrics adapter | 1–2 | HPA 经 custom/external metrics API 使用同一推理信号的完整路径 |
+| KEDA | 1–2 | Direct Prometheus、polling/cooldown/fallback 的整体效果 |
+| KEDA idle/zero | 0–2，隔离选做 | 激活到首 token 的冷启动与失败边界 |
+| WVA + 单一 actuator | 1–2，兼容时选做 | WVA recommendation 到 actuator passthrough 是否符合固定 release contract |
 
-### 2. Gateway 集成 smoke
+轨迹使用 steady → sustained burst → recovery 和 slow ramp → unload；短于完整冷启动的 burst 单列。保存 observe → desired → scheduled → image/model ready → route eligible → first token 时间戳。发生 Pending、模型下载、quota 或 node provisioning 时单独归因，不能当作 controller 算法耗时。
 
-- 在无 GPU stub 环境验证 request metadata、route attribution 和错误传播，但不产生性能结论。
-- 在真实双 GPU 环境验证非 streaming/streaming、长请求取消、单 Pod 下线和所有候选不可用。
-- 确认取消后 active request/goroutine 释放；已输出 token 后不自动重试，不能用隐藏 retry 改善成功率。
-- Candidate timeout 或 ext_proc 错误可观察，回切 baseline 后重复同一 smoke。
+### 冷启动与缩容检查
 
-### 3. 固定副本 A/B
+- 分解 Pod scheduled、image pull、model load、readiness、GAIE endpoint 可选与首个成功 token；Ready 不等于已有热 prefix cache。
+- 若测试 scale-to-zero，确认请求入口在零 Pod 时仍可达、激活信号不依赖已消失的 Pod metric，并为第一批请求定义排队/超时规则。
+- 在 metric outage 下验证 HPA Unknown/KEDA fallback 或固定 release 的实际行为；不得把 stale/empty query 转成低负载。
+- 降载时保留长 SSE，请求 drain 与 termination grace 独立于 cooldown；终止中的 active request 不从失败分母删除。
 
-| 配置 | 目的 |
-|---|---|
-| 冻结的既有 load/prefix baseline | 同一 gateway 的参考路径 |
-| 最小 candidate | 验证 Week 19 主假设 |
-| Candidate 去掉唯一新增项 | 对应主假设的一项消融，不扩展参数 sweep |
+## 成本 Contract
 
-使用 Week 19 固定的 hot-prefix/mixed 主 workload 和 low-sharing 负向对照；每个正式 cell 至少三个独立重复，按计划交错顺序。保持相同 cache 初始化、offered load、GPU 数、请求长度、gate/blending 与 engine config。
+```text
+allocated GPU-hours = integral(workload-allocated GPU count over time) / 3600
+billed GPU/node-hours = provider billing or node lifecycle quantity over the same experiment boundary
+```
 
-- 本周只用 development/evaluation 中预先指定的小矩阵，完整 held-out campaign 留给 Week 21–22。
-- 报告分组 TTFT、TPOT、SLO attainment、goodput、错误率、gateway routing latency/CPU 和 allocated/billed GPU-hours。
-- `-race`、fuzz、debug logging 与 profiler runs 不用于正式性能比较；性能二进制记录相同构建配置和独立 image digest。
-- No improvement 也是有效结论；若修 bug 或改参数，生成新版本并重新跑对应 baseline，不拼接不同版本结果。
+同时记录 warmup、idle capacity、node provisioning、磁盘和 LoadBalancer 成本。若两个 GPU 节点全程存在，Pod 从 2 缩到 1 只能支持 allocation 利用率结论，不能声称账单降低。按成功且达标 token 报成本时，失败/超时仍保留在 SLO 分母。
 
 ## 每日安排
 
 | 日期 | 预算 | 任务与产出 |
 |---|---:|---|
-| Day 1 | 1.5 h | 核对固定版本 extension 与数据接口，确定最小集成 diff |
-| Day 2 | 2 h | 接入 policy 与既有 snapshot，补齐候选/失败行为 |
-| Day 3 | 1.5 h | Table tests、race 和有界 fuzz，修复确定性失败 |
-| Day 4 | 1.5 h | Stub/gateway 和真实 GPU streaming/取消/下线 smoke |
-| Day 5 | 2 h | 冻结构建，运行 baseline/candidate/消融小矩阵 |
-| Day 6 | 1.5 h | 完成重复与负向对照，检查 gateway overhead 和分组结果 |
-| Day 7 | 1 h | 整理 patch、报告及 Week 21 handoff；同步结果并停止计费资源 |
+| Day 1 | 1.5 h | 冻结 fixed/HPA/KEDA、metrics adapter、scale target 与 unique-writer preflight |
+| Day 2 | 1.5 h | 校准 PromQL 与 adapter mapping，验证 aggregated API/HPA currentMetrics，建立 dashboard 时间轴 |
+| Day 3 | 2 h | 运行 Fixed-1/2 与 HPA burst/ramp 基线，保存完整 cold-start chain |
+| Day 4 | 2 h | 运行 KEDA 同一矩阵，验证 polling、cooldown 与 fallback |
+| Day 5 | 1.5 h | 做 metric outage、长 stream drain；条件满足时隔离测试 idle/zero |
+| Day 6 | 1.5 h | 完成重复与 allocated/billed 核算；兼容时做 WVA passthrough smoke |
+| Day 7 | 1 h | 完成 contract/报告、恢复固定副本、同步结果并停止计费资源 |
 
 ## 报告必须回答的问题
 
-1. 集成改了哪些最小接口，哪些现有 AIBrix 行为保持不变？
-2. Ready、freshness、并发 snapshot 与 fallback 的不变量是否通过测试？
-3. Streaming、取消、超时和 ext_proc 故障是否与 baseline 一致或有明确差异？
-4. 候选的收益能否被一项消融解释，low-sharing 是否退化？
-5. 策略计算和 metric/index 访问给 gateway 增加多少开销？
-6. 哪些结果仍需完整 held-out、更多重复或扩缩容联合实验才能成立？
+1. 每个模式中谁计算 desired replicas、谁写 scale target，如何证明没有双 writer？
+2. Dashboard、metrics adapter、HPA `currentMetrics` 与 KEDA 实际 query 是否同源、同单位、同过滤和同窗口？
+3. 响应延迟分别花在 scrape/poll/sync、schedule、image/model load、Ready、route eligibility 和 cache warmup 的哪一段？
+4. HPA 与 KEDA 的差异包含哪些指标/窗口/激活/fallback 变量，哪些结论不能归因于单一算法？
+5. Metric missing/stale、短 burst、长 stream 和 scale-down 时有什么失败或震荡？
+6. Scale-to-zero 是否真的可唤醒并服务第一批请求，还是只证明副本能降到零？
+7. Allocated GPU-hours 变化是否转化为 billed node/GPU-hours 变化？
+8. WVA 若执行，是否只做 recommendation source 且 actuator 为 pass-through；若未执行，具体兼容 blocker 是什么？
 
 ## 完成标准
 
-- [ ] 最小集成 diff 可绑定 upstream commit 与构建 image，未复制整套平台。
-- [ ] 关键 table/race/fuzz 测试通过；运行范围和未覆盖路径明确。
-- [ ] 真实 GPU smoke 覆盖生成、streaming、取消、Pod 下线和失败路径。
-- [ ] Baseline/candidate/消融保持固定副本与同一实验 contract。
-- [ ] 正式性能结果未混入 race/profiler 开销，原始失败和重复均保留。
-- [ ] 固定副本结论与最终项目结论分开，无收益或 blocker 如实记录。
-- [ ] 回切 baseline 已验证，Week 21 的路由与 scaling 版本均已冻结。
-- [ ] 所有结果同步并绑定 Git commit，GPU/LB/磁盘计费收尾完成。
+- [ ] Fixed、HPA、KEDA 各自只有一个可证明的 replicas writer，切换前后对象和 managed fields 已保存。
+- [ ] 从 fixed 转为 scaling 后，KServe reconcile 未用旧 `spec.replicas` 覆盖 chosen scale target。
+- [ ] Adapter/provider 版本、APIService、query-to-metric mapping 和 HPA `currentMetrics` 可审计；若缺失则明确降级为不可做同指标比较。
+- [ ] Metric query、labels、单位、聚合、freshness、threshold 和 missing/fallback contract 完整。
+- [ ] 固定副本、HPA、KEDA 使用同一 workload/SLO/版本并有独立重复和失败样本。
+- [ ] Observe-to-first-token 时间线可关联，冷启动未被压成单一 Ready 延迟。
+- [ ] Outage、drain、cooldown 和可选 idle/zero 行为有证据或明确 blocker。
+- [ ] Allocated 与 billed GPU/node-hours 分开，未用 Pod 缩容冒充账单节省。
+- [ ] WVA 明确标为兼容时选做，未完成的 optional path 没有写成已实现。
+- [ ] 恢复固定副本并同步证据，GPU、LB、磁盘和残留 autoscaling resources 已检查。

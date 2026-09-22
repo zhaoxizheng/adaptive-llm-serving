@@ -1,47 +1,71 @@
 # Week 18 Reference Reading
 
-第十八周新增分布式 prompt scheduling 的论文视角和 block key/隔离设计；APC 入门、KV block 生命周期、AIBrix routing 与 KV events 不重复列书目。
+第十八周新增 llm-d Router/EPP 的架构与 load-/precise-prefix-aware 路径，再用 Preble 和 vLLM prefix caching design 校准 locality/load 及 cache identity。Gateway API core v1、InferencePool v1 与 Envoy `ext_proc` 直接复用 Week 16–17，不重复编号。
 
-新增页面于 2026-09-19 通过公开文档只读抓取核对。论文机制与所选 AIBrix release 的实现分别验证，论文数字不是本实验收益。
+以下官方/原始来源由 2026-09-22 的 routing research 核对。llm-d 配置名会随 release/chart 漂移，执行必须保存固定 release、chart values、source commit 和 rendered plugin pipeline；文档页面只提供概念入口。
 
-## 新增必读
+## 新增必读：llm-d Router/EPP
 
-1. [Preble: Efficient Distributed Prompt Scheduling for LLM Serving](https://arxiv.org/abs/2407.00023)
-   - 先读问题定义、locality/load-balancing 策略和评估条件，重点找“仅追求 cache hit 为何不够”。
-   - 阅读时固定论文版本；不要求实现论文系统，也不重做前面的 batching 基础。
+1. [llm-d Router Architecture](https://llm-d.ai/docs/architecture/core/router)
+   - 先读 Router 在 llm-d 推理栈、Gateway API/GAIE 与 backend 之间的位置。
+   - 区分 production-oriented 的设计目标、CNCF Sandbox 项目状态和本地已验证能力；不能推导所有环境都有 managed SLA。
 
-2. [vLLM Prefix Caching Design](https://docs.vllm.ai/en/latest/design/prefix_caching/)
-   - 只读 block hash components、序列化一致性和 Cache Isolation for Security。
-   - 与 Week 4 APC 用户语义不同，本周新增的是跨进程 key 一致性和授权共享边界；跳过 Week 9 已掌握的 allocate/free 讲解。
-   - Hash/salt 不是身份认证，固定版本是否支持相应隔离需实际核对。
+2. [llm-d Endpoint Picker (EPP)](https://llm-d.ai/docs/architecture/core/router/epp)
+   - 阅读 EPP 组件、候选 endpoint、plugin pipeline、request metadata 与选择输出。
+   - 重点核对 Router/EPP 与 vLLM scheduler 的职责边界；实际插件顺序以固定 release 的 rendered config/source 为准。
+
+3. [llm-d Precise Prefix Cache Routing](https://llm-d.ai/docs/well-lit-paths/foundations/precise-prefix-cache-routing)
+   - 阅读 well-lit path 的前提、部署组件、prefix/cache 信号和验证方法。
+   - 不把页面中的字段名复制成长期 contract；从固定 release/chart 导航到真实 values/schema 并保存 rendered pipeline。
+   - 若固定 release 无该路径或链接迁移，从该 release 的文档导航查找并记录替代 permalink，不切换 moving `main`。
+
+4. [llm-d Router Repository](https://github.com/llm-d/llm-d-router)
+   - 固定 tag/commit，定位 pipeline construction、load/prefix plugins、fallback 和 metrics 的源码 permalink。
+   - README 或 `main` 仅用于导航；构建、镜像与运行证据必须绑定同一 revision。
+
+## 新增必读：Locality、Load 与 Cache Identity
+
+5. [Preble: Efficient Distributed Prompt Scheduling for LLM Serving](https://arxiv.org/abs/2407.00023)
+   - 阅读问题定义、locality/load-balancing 取舍和评估条件，重点理解“只追求 cache hit”为何可能形成热点。
+   - 固定论文版本；只用来设计反例，不复刻系统，也不将论文数字当作本地收益。
+
+6. [vLLM Prefix Caching Design](https://docs.vllm.ai/en/latest/design/prefix_caching/)
+   - 只读 block hash components、序列化一致性和 cache isolation/security。
+   - APC 用户语义已在 Week 4 首次收录，block allocation/free 已在 Week 9 学过；本周新增的是跨组件 identity 与证据边界。
+   - Hash/salt 不等于可信身份或授权，固定 vLLM 是否支持相关配置需以版本和 runtime 核对。
 
 ## 复用：只查本周增量问题
 
 | 已有来源 | 本周只查什么 |
 |---|---|
-| [Week 16 references](week-16-references.md) #5 | Prefix 路由如何与 load gate/blending 交互 |
-| [Week 16 references](week-16-references.md) #8 | Event schema、tokenizer 前提、store/remove 和 subscriber 恢复限制 |
-| [Week 9 references](week-09-references.md) #1–3 | 实际 block 驱逐时机，区分 free 与 residency 消失 |
-| [Week 4 references](week-04-references.md) #7/#10 | Engine cache 指标单位与实例内 APC 边界 |
+| [Week 17 references](week-17-references.md) #2–4 | InferencePool/EPP API contract、status 与字段约束 |
+| [Week 17 references](week-17-references.md) #7 | ext_proc timeout/stats/failure 边界，不重复编号 Envoy 来源 |
+| [Week 16 references](week-16-references.md) #3 | Gateway/HTTPRoute attribution 与 streaming contract |
+| [Week 4 references](week-04-references.md) #7/#10 | Engine metrics 与实例内 APC，不重学基础操作 |
+| [Week 9 references](week-09-references.md) #1–3 | Block lifecycle/eviction 的源码语义，用于检查实际 reuse/residency |
 
-Cold/warm 流程直接复用 [Week 13 plan](week-13-plan.md)；本周只新增副本归属、热点负载和 event staleness，不再分配一次 APC 基础阅读。
+Cold/warm 流程直接复用 [Week 13 plan](week-13-plan.md)。Reference EPP 的定位与 conformance 证据留在 Week 17；本周只把它替换为 llm-d Router/EPP，不做不公平的生产性能对照。
 
 ## 阅读顺序
 
 | 日期 | 阅读 | 对应任务 |
 |---|---|---|
-| Day 1 | 新增 2；复用 Week 16 #8 | Identity、兼容性与 event contract |
-| Day 2 | 复用 Week 9 #1–3、Week 4 #7 | Store/hit/remove 证据 |
-| Day 3–4 | 新增 1；复用 Week 16 #5 | Locality/load tradeoff 与反例 |
-| Day 5 | 复用 Week 16 #8 | Pod replacement、stale index 和恢复 |
-| Day 6–7 | 论文评估条件与本地数据 | 适用边界和项目问题 |
+| Day 1 | 新增 1–4；复用 Week 17 #2–4 | 组件边界、版本与 rendered plugin pipeline |
+| Day 2 | 新增 2、4；复用 Week 17 #7 | Load-aware 数据路径与 request attribution |
+| Day 3 | 新增 3、6；复用 Week 4 #10 | Precise-prefix identity、预测与实际 reuse |
+| Day 4 | 新增 5；回看 2–3 | Shared/hot/low-sharing 的 locality/load 反例 |
+| Day 5 | 新增 4、6；复用 Week 9 #1–3 | Stale state、Pod replacement、churn 与恢复 |
+| Day 6 | 固定源码/metrics 与实验数据 | 分组结果、开销和 Week 19 候选问题 |
+| Day 7 | Contract 与实验结果 | 报告、回切和 handoff |
 
 ## 阅读后的自测问题
 
-1. Shared prefix 在文本相同的情况下，为什么未必拥有可比较的 block hash？
-2. Gateway 预测命中与实际 reused tokens 为什么不同？
-3. 为什么 cache hit 更高可能同时导致 P99 TTFT 更差？
-4. Free、eviction 和 BlockRemoved 分别意味着什么？
-5. Subscriber 重连是否能恢复所有遗漏事件，需要什么证据？
-6. KV event sync 与 KV tensor transfer 各自传递什么？
-7. Cache salt 能否替代可信租户身份和授权策略？
+1. llm-d Router/EPP 与 vLLM scheduler 分别决定什么？
+2. 为什么 llm-d production-oriented 且属于 CNCF Sandbox，仍不能代表任意环境都有通用 managed guarantee？
+3. 如何从固定 chart values 和 rendered config 证明实际 plugin pipeline，而不是依赖可能漂移的字段名？
+4. Load metric 缺失或过期时，为什么不能按零负载处理？
+5. Precise prefix prediction、index residency 和 engine actual reused tokens 有什么区别？
+6. 文本相同为什么仍可能因 model/tokenizer/template/adapter identity 不同而无法安全共享 cache？
+7. 为什么 cache hit 更高可能同时让热点 Pod 的 P99 TTFT 更差？
+8. Pod replacement 或 cache churn 后，哪些旧状态必须失效，怎样证明恢复？
+9. Preble 论文机制与本地 llm-d pipeline A/B 之间为什么不能画等号？

@@ -2,7 +2,7 @@
 
 > 时间预算：约 11 小时
 >
-> 本周主线：复用已掌握的 Kubernetes 和 Prometheus，在真实双 GPU 环境建立多副本 baseline，验证路由、请求排空和冷启动的实际行为，为 AIBrix 提供公平对照。
+> 本周主线：复用已掌握的 Kubernetes 和 Prometheus，在真实双 GPU 环境建立多副本 baseline，验证路由、请求排空和冷启动的实际行为，为后续 Gateway API/GAIE 对照提供公平证据。
 >
 > 前置：[Week 14 plan](week-14-plan.md) 的固定 serving baseline；阅读：[Week 15 references](week-15-references.md)。下列文件是待完成产出。
 
@@ -17,7 +17,7 @@
 ## 本周边界
 
 - 不重新学习 Deployment、Service、Probe、Prometheus 或 HPA 基础。
-- 不安装 AIBrix，不实现 cache-aware/SLO-aware router。
+- 不安装 Gateway API/GAIE 或其他推理网关扩展，不实现 cache-aware/SLO-aware router。
 - 不将两个进程挤在同一张 GPU 上冒充双副本性能实验。
 - 测试只在独立实验集群/namespace；不复用工作环境的配置、凭证或真实流量。
 - CPU-only 集群可做 manifest/control-plane smoke，但不能替代 GPU 性能与容量验收。
@@ -30,7 +30,7 @@
 - `configs/week15-multireplica.yaml`：workload、SLO、cache 状态和副本矩阵。
 - `scripts/run_week15_baseline.sh`：部署验收、baseline 与 lifecycle 实验入口。
 - `results/week15/`：逐请求/逐副本指标、HPA events、cold-start 和 drain timeline。
-- `reports/week15.md`：多副本 baseline、观察到的限制和 Week 16 handoff。
+- `reports/week15.md`：多副本 baseline、观察到的限制和后续 Gateway API/GAIE handoff。
 
 ## 资源与安全前置
 
@@ -91,7 +91,7 @@ Load generator → request-level RR gateway
 | Day 4 | 1.5 h | Shared-prefix workload，分析 cache 状态而非只看请求数 |
 | Day 5 | 2 h | 固定副本与 HPA burst 对照，记录副本时间线和 GPU 成本 |
 | Day 6 | 1.5 h | Cold start、正常 drain 与单 Pod 失败；运行必要重复 |
-| Day 7 | 1 h | 完成 baseline 报告、冻结 Week 16 输入、同步结果并清理计费资源 |
+| Day 7 | 1 h | 完成 baseline 报告、冻结后续 Gateway API/GAIE 对照输入、同步结果并清理计费资源 |
 
 ## 报告必须回答的问题
 
@@ -101,7 +101,7 @@ Load generator → request-level RR gateway
 4. Burst 中观测到压力、desired replicas 增加、Pod Ready 和首个 token 之间各有多久？
 5. CPU 指标对本 workload 有多强解释力，缺失了什么推理压力信息？
 6. 正常下线是否排空了已有请求，强制失败丢失了哪些请求？
-7. 哪个 workload 最适合 Week 16 的 AIBrix 路由对照，哪些结论仍是待验证假设？
+7. 哪个 workload 最适合后续 Gateway API/GAIE 路由对照，哪些结论仍是待验证假设？
 
 ## 完成标准
 
@@ -111,5 +111,5 @@ Load generator → request-level RR gateway
 - [ ] HPA burst 有 desired/current/Ready 时间线，和固定单/双副本基线可对照。
 - [ ] Cold start、drain 与 Pod 失败都有实际观察，不仅是 YAML 配置。
 - [ ] 结果不预设 RR/HPA 必然更差，限制和反例保留。
-- [ ] Week 16 使用的后端配置、workload 和指标定义已固定。
+- [ ] 后续 Gateway API/GAIE 对照使用的后端配置、workload 和指标定义已固定。
 - [ ] 结果同步后检查 GPU 节点、磁盘、LB 和公网 IP 的残余计费。

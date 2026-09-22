@@ -1,7 +1,7 @@
 [project]
 name = "adaptive-llm-serving"
 version = "0.1.0"
-description = "A reproducible learning project from single-GPU inference to AIBrix."
+description = "A reproducible learning project from single-GPU inference to cloud-native LLM serving."
 requires-python = ">=3.10"
 
 [tool.pytest.ini_options]
