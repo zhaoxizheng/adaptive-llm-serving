@@ -137,16 +137,32 @@ On the VM:
 ```bash
 cd ~/adaptive-llm-serving
 bash scripts/bootstrap_gcp.sh .
-make smoke PYTHON=.venv/bin/python
-make benchmark PYTHON=.venv/bin/python
-make report PYTHON=.venv/bin/python
+make run-week01 PYTHON=.venv/bin/python
 ```
+
+`run-week01` captures the environment, validates the immutable model snapshot,
+persists structured smoke evidence, runs or resumes the full matrix, saves a
+combined log, and generates both figures. Do not write the report on the billable
+GPU VM. Sync the evidence and stop the VM first.
 
 Back on the Mac, download the results and stop compute billing:
 
 ```bash
-scripts/sync_results_from_gcp.sh ./gcp-results
+scripts/sync_results_from_gcp.sh .
 scripts/gcp_vm.sh stop
+scripts/gcp_vm.sh status
+```
+
+On the Mac, install the lightweight verification dependencies if they are not
+already available, write the numerical conclusions in `reports/week01.md` from the
+synced raw data and figures, then run the offline evidence gate. The verifier checks
+that the current experiment code matches the code used on the GPU; report-only
+edits do not change that identity.
+
+```bash
+python3.12 -m venv .verify-venv
+.verify-venv/bin/python -m pip install PyYAML==6.0.2
+make verify PYTHON=.verify-venv/bin/python
 ```
 
 The stopped VM does not incur compute charges, but its persistent disk continues to incur storage charges. Delete the VM after preserving results when it is no longer needed.
@@ -158,7 +174,9 @@ The stopped VM does not incur compute charges, but its persistent disk continues
 - each completed case is written through a temporary file and atomically replaced;
 - the file is flushed to disk before the next case starts;
 - completed `(prompt_tokens, output_tokens, repeat, use_cache)` cases are skipped on restart;
-- a configuration fingerprint prevents accidentally combining different experiment matrices.
+- an immutable run ID binds every row to the scientific config, clean Git commit,
+  pinned model revision, GPU identity, Python, PyTorch, Transformers, CUDA, and driver;
+- resume validates the CSV and all identities before accepting any completed case.
 
 If GCP stops the VM, start it again and rerun the same command. To intentionally change the benchmark configuration, archive or remove the old CSV first.
 
@@ -168,9 +186,12 @@ If GCP stops the VM, start it again and rerun the same command. To intentionally
 |---|---|
 | `make install` | Install runtime dependencies |
 | `make check-env` | Capture GPU and software versions |
-| `make smoke` | Run one short measured generation |
+| `make prepare-model` | Download the pinned model snapshot and hash its files |
+| `make smoke` | Run one short generation and save structured evidence |
 | `make benchmark` | Compare KV cache enabled and disabled, resuming if interrupted |
 | `make report` | Generate charts from raw benchmark data |
+| `make run-week01` | Run the complete evidence-producing Week 1 workflow |
+| `make verify` | Verify all Week 1 artifacts offline without running CUDA |
 | `make test` | Run unit tests |
 | `make lint` | Run Ruff static checks |
 
@@ -185,16 +206,25 @@ make benchmark CONFIG=configs/week01.yaml PYTHON=.venv/bin/python
 Every performance result must include:
 
 - Git commit
+- clean/dirty state and immutable run ID
 - configuration fingerprint
 - GPU model and count
 - driver, CUDA, PyTorch, and Transformers versions
-- model identifier and revision
+- model identifier, immutable revision, and snapshot file hashes
 - dtype
 - prompt and output token counts
 - warmup and repetition counts
 - raw per-run results
 
-Do not compare runs across different GPU models as if they were controlled results. Resume one CSV only on the same VM and GPU type.
+Week 1 standardizes on Python 3.12, PyTorch 2.8.0 with the CUDA 12.8 wheel,
+Transformers 4.46.3, and a pinned Qwen model commit. Direct dependencies are pinned;
+the full post-install dependency freeze is retained as audit evidence and bound to
+the run identity. The actual GCE image, GPU capability, driver, and CUDA runtime are
+also retained. The freeze is not a hash-locked cross-platform environment lock.
+
+Do not compare runs across different GPU models as if they were controlled results.
+Resume one CSV only when the runner accepts the same source, machine ID/GCE instance
+ID, dependency freeze, GPU, CUDA, driver, and model snapshot identities.
 
 ## Repository Layout
 

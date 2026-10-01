@@ -1,7 +1,8 @@
 model:
   id: Qwen/Qwen2.5-0.5B-Instruct
-  revision: main
-  dtype: auto
+  revision: 7ae557604adf67be50417f59c2c2f167def9a775
+  dtype: bfloat16
+  local_files_only: true
 
 generation:
   prompt: >-
@@ -17,6 +18,15 @@ benchmark:
   cache_modes: [true, false]
 
 output:
+  environment_json: results/week01/environment.json
+  dependency_freeze: results/week01/dependency-freeze.txt
+  model_snapshot: results/week01/model-snapshot.json
+  smoke_json: results/week01/smoke.json
+  run_log: results/week01/logs/week01.log
+  run_status: results/week01/run-status.json
+  verification_receipt: results/week01/verification-receipt.json
   raw_csv: results/week01/raw/kv_cache.csv
   run_metadata: results/week01/raw/run_metadata.json
+  figures_dir: results/week01/figures
+  report_markdown: reports/week01.md
 

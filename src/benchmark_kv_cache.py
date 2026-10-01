@@ -1,40 +1,29 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
-import platform
 from pathlib import Path
 
 import torch
-import transformers
 
-from src.common import git_commit, load_yaml, utc_now, write_json
+from src.common import (
+    load_yaml,
+    read_json,
+    require_clean_source,
+    source_identity,
+    utc_now,
+    write_json,
+)
 from src.inference import build_exact_length_input, load_model, run_greedy_generation
-from src.result_store import append_row, case_key, read_rows
-
-
-RESULT_FIELDS = [
-    "timestamp",
-    "git_commit",
-    "config_fingerprint",
-    "model",
-    "dtype",
-    "repeat",
-    "use_cache",
-    "prompt_tokens",
-    "output_tokens",
-    "tokenization_ms",
-    "prefill_ms",
-    "first_token_ms",
-    "mean_tpot_ms",
-    "p50_tpot_ms",
-    "p95_tpot_ms",
-    "total_generation_ms",
-    "output_tokens_per_second",
-    "peak_memory_mb",
-    "output_token_hash",
-]
+from src.result_store import append_row, read_rows
+from src.week01_contract import (
+    RESULT_FIELDS,
+    collect_runtime_identity,
+    create_run_metadata,
+    expected_cases,
+    validate_result_rows,
+    validate_run_metadata,
+    validate_model_snapshot,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,101 +32,112 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def config_fingerprint(config: dict[str, object]) -> str:
-    serialized = json.dumps(config, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(serialized.encode()).hexdigest()[:16]
+def load_or_create_metadata(
+    metadata_path: Path,
+    output_path: Path,
+    config: dict[str, object],
+    source: dict[str, object],
+    runtime: dict[str, object],
+) -> dict[str, object]:
+    if metadata_path.exists():
+        metadata = read_json(metadata_path)
+        validate_run_metadata(metadata, config, source=source, runtime=runtime)
+        return metadata
+    if output_path.exists() and output_path.stat().st_size:
+        raise RuntimeError(
+            f"Cannot resume {output_path}: required metadata {metadata_path} is missing."
+        )
+    metadata = create_run_metadata(config, source, runtime)
+    write_json(metadata_path, metadata)
+    return metadata
 
 
 def main() -> None:
     args = parse_args()
     config = load_yaml(args.config)
-    benchmark = config["benchmark"]
+    source = source_identity()
+    require_clean_source(source)
     output_path = Path(config["output"]["raw_csv"])
-    fingerprint = config_fingerprint(config)
-    existing_rows = read_rows(output_path)
-    completed = {case_key(row) for row in existing_rows}
-    expected = {
-        (prompt_tokens, output_tokens, repeat, use_cache)
-        for prompt_tokens in benchmark["prompt_tokens"]
-        for output_tokens in benchmark["output_tokens"]
-        for repeat in range(benchmark["repeats"])
-        for use_cache in benchmark["cache_modes"]
-    }
-
-    existing_fingerprints = {row.get("config_fingerprint", "") for row in existing_rows}
-    if existing_rows and existing_fingerprints != {fingerprint}:
+    metadata_path = Path(config["output"]["run_metadata"])
+    snapshot_path = Path(config["output"]["model_snapshot"])
+    if not snapshot_path.is_file():
         raise RuntimeError(
-            f"Cannot resume {output_path}: its configuration differs from {args.config}. "
-            "Move the existing CSV to a separate run directory before starting a new matrix."
+            f"Missing model snapshot evidence {snapshot_path}; run make prepare-model first."
         )
-    unexpected = completed.difference(expected)
-    if unexpected:
-        raise RuntimeError(f"Existing result file contains cases outside this matrix: {unexpected}")
+    snapshot = read_json(snapshot_path)
+    validate_model_snapshot(config, snapshot)
+    runtime = collect_runtime_identity(config)
+    metadata = load_or_create_metadata(
+        metadata_path,
+        output_path,
+        config,
+        source,
+        runtime,
+    )
+    existing_rows = read_rows(output_path, expected_fields=RESULT_FIELDS)
+    completed = validate_result_rows(
+        existing_rows,
+        metadata,
+        config,
+        require_complete=False,
+    )
+    expected = expected_cases(config)
     if completed == expected:
-        print(f"All {len(expected)} cases are already complete in {output_path}.")
+        validate_result_rows(existing_rows, metadata, config, require_complete=True)
+        print(f"All {len(expected)} cases are complete and valid in {output_path}.")
         return
     if completed:
-        print(f"Resuming {output_path}: {len(completed)}/{len(expected)} cases complete.")
+        print(
+            f"Resuming run {metadata['run_id']}: "
+            f"{len(completed)}/{len(expected)} cases complete."
+        )
 
     torch.manual_seed(config["generation"]["seed"])
-
     tokenizer, model, dtype = load_model(
         config["model"]["id"],
         config["model"]["revision"],
         config["model"]["dtype"],
+        local_files_only=bool(config["model"].get("local_files_only", True)),
+        model_path=str(snapshot["snapshot_path"]),
     )
-
-    metadata = {
-        "started_at": utc_now(),
-        "git_commit": git_commit(),
-        "platform": platform.platform(),
-        "gpu": torch.cuda.get_device_name(0),
-        "gpu_count": torch.cuda.device_count(),
-        "cuda": torch.version.cuda,
-        "pytorch": torch.__version__,
-        "transformers": transformers.__version__,
-        "model": config["model"]["id"],
-        "revision": config["model"]["revision"],
-        "dtype": str(dtype),
-        "config_fingerprint": fingerprint,
-        "resumed_completed_cases": len(completed),
-        "total_cases": len(expected),
-        "config": config,
-    }
-    write_json(config["output"]["run_metadata"], metadata)
-
-    inputs = {}
-    for prompt_tokens in benchmark["prompt_tokens"]:
-        inputs[prompt_tokens] = build_exact_length_input(
-            tokenizer, config["generation"]["prompt"], prompt_tokens
+    resolved_dtype = str(dtype).removeprefix("torch.")
+    if resolved_dtype != runtime["dtype"]:
+        raise RuntimeError(
+            f"Loaded dtype {resolved_dtype} does not match runtime contract {runtime['dtype']}"
         )
 
-    max_prompt = max(benchmark["prompt_tokens"])
-    warmup_input, warmup_tokenization_ms = inputs[max_prompt]
-    print(f"Warming up with {max_prompt} prompt tokens...")
-    for use_cache in benchmark["cache_modes"]:
-        for _ in range(benchmark["warmup_runs"]):
-            run_greedy_generation(
-                model,
-                warmup_input,
-                min(8, min(benchmark["output_tokens"])),
-                use_cache=use_cache,
-                tokenization_ms=warmup_tokenization_ms,
-            )
+    inputs = {
+        prompt_tokens: build_exact_length_input(
+            tokenizer,
+            config["generation"]["prompt"],
+            prompt_tokens,
+        )
+        for prompt_tokens in config["benchmark"]["prompt_tokens"]
+    }
+    print("Warming every measured prompt/output shape and cache mode...")
+    for prompt_tokens, (warmup_input, warmup_tokenization_ms) in inputs.items():
+        for output_tokens in config["benchmark"]["output_tokens"]:
+            for use_cache in config["benchmark"]["cache_modes"]:
+                for _ in range(config["benchmark"]["warmup_runs"]):
+                    run_greedy_generation(
+                        model,
+                        warmup_input,
+                        output_tokens,
+                        use_cache=use_cache,
+                        tokenization_ms=warmup_tokenization_ms,
+                    )
+        print(f"warmed prompt_tokens={prompt_tokens}")
 
     reference_hashes: dict[tuple[int, int, int], str] = {}
     for row in existing_rows:
-        reference_key = (int(row["prompt_tokens"]), int(row["output_tokens"]), int(row["repeat"]))
-        previous_hash = reference_hashes.setdefault(reference_key, row["output_token_hash"])
-        if previous_hash != row["output_token_hash"]:
-            raise RuntimeError(f"Existing cache on/off results disagree for case {reference_key}.")
+        key = (int(row["prompt_tokens"]), int(row["output_tokens"]), int(row["repeat"]))
+        reference_hashes.setdefault(key, row["output_token_hash"])
 
     written = 0
-    for prompt_tokens in benchmark["prompt_tokens"]:
-        input_ids, tokenization_ms = inputs[prompt_tokens]
-        for output_tokens in benchmark["output_tokens"]:
-            for repeat in range(benchmark["repeats"]):
-                for use_cache in benchmark["cache_modes"]:
+    for prompt_tokens in config["benchmark"]["prompt_tokens"]:
+        for output_tokens in config["benchmark"]["output_tokens"]:
+            for repeat in range(config["benchmark"]["repeats"]):
+                for use_cache in config["benchmark"]["cache_modes"]:
                     current_case = (prompt_tokens, output_tokens, repeat, use_cache)
                     if current_case in completed:
                         print(
@@ -145,6 +145,11 @@ def main() -> None:
                             f"cache={str(use_cache):5s} repeat={repeat}"
                         )
                         continue
+                    input_ids, tokenization_ms = build_exact_length_input(
+                        tokenizer,
+                        config["generation"]["prompt"],
+                        prompt_tokens,
+                    )
                     result, _ = run_greedy_generation(
                         model,
                         input_ids,
@@ -152,21 +157,23 @@ def main() -> None:
                         use_cache=use_cache,
                         tokenization_ms=tokenization_ms,
                     )
-                    key = (prompt_tokens, output_tokens, repeat)
-                    if (
-                        key in reference_hashes
-                        and reference_hashes[key] != result.output_token_hash
-                    ):
+                    output_key = (prompt_tokens, output_tokens, repeat)
+                    previous_hash = reference_hashes.setdefault(
+                        output_key, result.output_token_hash
+                    )
+                    if previous_hash != result.output_token_hash:
                         raise RuntimeError(
-                            f"Cache on/off produced different tokens for case {key}."
+                            f"Cache on/off produced different tokens for case {output_key}."
                         )
-                    reference_hashes[key] = result.output_token_hash
                     row = {
                         "timestamp": utc_now(),
-                        "git_commit": metadata["git_commit"],
-                        "config_fingerprint": fingerprint,
-                        "model": metadata["model"],
-                        "dtype": metadata["dtype"],
+                        "run_id": metadata["run_id"],
+                        "git_commit": source["git_commit"],
+                        "config_fingerprint": metadata["config_fingerprint"],
+                        "runtime_fingerprint": metadata["runtime_fingerprint"],
+                        "model": runtime["model"],
+                        "model_revision": runtime["model_revision"],
+                        "dtype": runtime["dtype"],
                         "repeat": repeat,
                         **result.to_dict(),
                     }
@@ -180,12 +187,13 @@ def main() -> None:
                         f"tok/s={result.output_tokens_per_second:.2f}"
                     )
 
+    rows = read_rows(output_path, expected_fields=RESULT_FIELDS)
+    validate_result_rows(rows, metadata, config, require_complete=True)
     print(
         f"Wrote {written} new rows to {output_path}; "
-        f"{len(completed)}/{len(expected)} cases complete."
+        f"run {metadata['run_id']} is complete ({len(rows)}/{len(expected)} cases)."
     )
 
 
 if __name__ == "__main__":
     main()
-

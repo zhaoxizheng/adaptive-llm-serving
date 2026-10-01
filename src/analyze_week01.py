@@ -9,8 +9,9 @@ import pandas as pd
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Plot the Week 1 KV cache results.")
-    parser.add_argument("--input", default="results/week01/raw/kv_cache.csv")
-    parser.add_argument("--output-dir", default="results/week01/figures")
+    parser.add_argument("--config", default="configs/week01.yaml")
+    parser.add_argument("--input")
+    parser.add_argument("--output-dir")
     return parser.parse_args()
 
 
@@ -40,9 +41,26 @@ def plot_metric(frame: pd.DataFrame, metric: str, ylabel: str, output: Path) -> 
 
 def main() -> None:
     args = parse_args()
-    frame = pd.read_csv(args.input)
+    from src.common import load_yaml
+
+    config = load_yaml(args.config)
+    input_path = args.input or config["output"]["raw_csv"]
+    output_path = args.output_dir or config["output"]["figures_dir"]
+    frame = pd.read_csv(input_path)
+    required = {
+        "prompt_tokens",
+        "output_tokens",
+        "use_cache",
+        "total_generation_ms",
+        "output_tokens_per_second",
+    }
+    missing = required.difference(frame.columns)
+    if missing:
+        raise ValueError(f"Week 1 result CSV is missing columns: {sorted(missing)}")
+    if frame.empty:
+        raise ValueError("Week 1 result CSV is empty")
     frame["use_cache"] = frame["use_cache"].astype(str).str.lower().eq("true")
-    output_dir = Path(args.output_dir)
+    output_dir = Path(output_path)
     output_dir.mkdir(parents=True, exist_ok=True)
     plot_metric(
         frame,

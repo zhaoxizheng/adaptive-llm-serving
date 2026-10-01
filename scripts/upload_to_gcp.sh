@@ -7,11 +7,15 @@ GCP_VM_NAME="${GCP_VM_NAME:-adaptive-llm-week01}"
 REMOTE_DIR="${REMOTE_DIR:-adaptive-llm-serving}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SOURCE_MANIFEST="${PROJECT_DIR}/.experiment-source.json"
 
 if [[ -z "${GCP_PROJECT_ID}" ]]; then
   echo "Set GCP_PROJECT_ID before running this script." >&2
   exit 2
 fi
+
+cd "${PROJECT_DIR}"
+python3 -m scripts.write_source_manifest --output "${SOURCE_MANIFEST}"
 
 gcloud compute ssh "${GCP_VM_NAME}" \
   --project="${GCP_PROJECT_ID}" --zone="${GCP_ZONE}" \
@@ -19,6 +23,7 @@ gcloud compute ssh "${GCP_VM_NAME}" \
 
 gcloud compute scp --recurse \
   "${PROJECT_DIR}/.gitignore" \
+  "${SOURCE_MANIFEST}" \
   "${PROJECT_DIR}/Makefile" \
   "${PROJECT_DIR}/README.md" \
   "${PROJECT_DIR}/pyproject.toml" \

@@ -31,7 +31,11 @@ export GCP_PROJECT_ID=YOUR_PROJECT_ID
 export GCP_ZONE=us-central1-a
 ```
 
-Optional overrides are `GCP_VM_NAME`, `GCP_MACHINE_TYPE`, `GCP_IMAGE_FAMILY`, and `GCP_DISK_GB`. Keep the project defaults fixed for the Week 1 report.
+Optional overrides are `GCP_VM_NAME`, `GCP_MACHINE_TYPE`, `GCP_IMAGE_FAMILY`,
+`GCP_IMAGE_NAME`, `GCP_DISK_GB`, and `GCP_MAX_RUN_DURATION`. Creation resolves the
+image family once and then passes the concrete image name to GCE. The default
+maximum run duration is six hours, after which GCE stops the VM. Keep the resolved
+image and project defaults fixed in the Week 1 report.
 
 ## 2. Create the Spot VM
 
@@ -63,7 +67,9 @@ export GCP_IMAGE_FAMILY=ubuntu-2404-lts-amd64
 
 ## 3. Upload and Bootstrap
 
-The project has no remote repository yet, so upload the working tree from the Mac:
+Upload the clean, committed working tree from the Mac. The upload command refuses a
+dirty source and creates `.experiment-source.json`, so the non-Git VM records the
+real local commit rather than `uncommitted`:
 
 ```bash
 scripts/upload_to_gcp.sh
@@ -83,10 +89,15 @@ The first bootstrap run installs Google's recommended LTS NVIDIA driver and migh
 cd ~/adaptive-llm-serving
 bash scripts/bootstrap_gcp.sh .
 nvidia-smi
-make smoke PYTHON=.venv/bin/python
+make run-week01 PYTHON=.venv/bin/python
 ```
 
-Once the driver is available, the bootstrap creates `.venv`, installs the CUDA 12.8 PyTorch wheel and the remaining dependency ranges, then writes `results/week01/environment.json`. Override `PYTORCH_INDEX_URL` only when deliberately testing another compatible PyTorch CUDA build. Use `.venv/bin/python` for subsequent Make commands.
+Once the driver is available, the bootstrap creates a Python 3.12 `.venv`, installs
+PyTorch 2.8.0 from the CUDA 12.8 index and the exact application dependencies,
+saves `dependency-freeze.txt`, validates the CUDA environment, and downloads the
+pinned model commit with a file-level SHA-256 inventory. Override versions only for
+a separate experiment; an existing Week 1 run will refuse to resume after runtime
+identity changes.
 
 ## 4. Run and Resume the Benchmark
 
@@ -94,9 +105,12 @@ On the VM:
 
 ```bash
 cd ~/adaptive-llm-serving
-make benchmark PYTHON=.venv/bin/python
-make report PYTHON=.venv/bin/python
+make run-week01 PYTHON=.venv/bin/python
 ```
+
+The runner captures a structured smoke result, a combined stdout/stderr log, the
+full resumable benchmark, both figures, and `run-status.json`. Do not write the
+report while the GPU VM is billing.
 
 If the VM is preempted, start it from the Mac and reconnect:
 
@@ -105,25 +119,41 @@ scripts/gcp_vm.sh start
 scripts/gcp_vm.sh ssh
 ```
 
-Then rerun `make benchmark PYTHON=.venv/bin/python`. Completed cases in `kv_cache.csv` are skipped. Do not upload a new working tree over the remote `results/` directory before resuming.
+Then rerun `make run-week01 PYTHON=.venv/bin/python`. Its benchmark stage validates
+the existing evidence and skips completed cases, while the remaining stages rebuild
+figures and restore `run-status.json` to `artifacts_ready`. Do not upload a new
+working tree over the remote `results/` directory before resuming.
 
 ## 5. Download Results and Stop Billing
 
 From the Mac:
 
 ```bash
-scripts/sync_results_from_gcp.sh ./gcp-results
+scripts/sync_results_from_gcp.sh .
 scripts/gcp_vm.sh stop
 scripts/gcp_vm.sh status
 ```
 
+Now work locally: complete `reports/week01.md` using the synced raw data and figures,
+then create a small local Python 3.12 environment containing PyYAML and run
+`make verify PYTHON=<that-python>`. Verification does not use
+CUDA; on success it writes `results/week01/verification-receipt.json` and marks the
+durable run status `completed`. It rejects changes to experiment code but permits
+the expected local report edit. Commit the report and selected evidence only after
+reviewing their size and contents.
+
 Verify these files locally before deleting the VM:
 
-- `gcp-results/results/week01/environment.json`
-- `gcp-results/results/week01/raw/kv_cache.csv`
-- `gcp-results/results/week01/raw/run_metadata.json`
-- `gcp-results/results/week01/figures/generation-time.png`
-- `gcp-results/results/week01/figures/output-throughput.png`
+- `results/week01/environment.json`
+- `results/week01/dependency-freeze.txt`
+- `results/week01/model-snapshot.json`
+- `results/week01/smoke.json`
+- `results/week01/logs/week01.log`
+- `results/week01/raw/kv_cache.csv`
+- `results/week01/raw/run_metadata.json`
+- `results/week01/figures/generation-time.png`
+- `results/week01/figures/output-throughput.png`
+- `results/week01/verification-receipt.json` after local report verification
 
 When the VM and its boot disk are no longer needed:
 

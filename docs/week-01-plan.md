@@ -65,7 +65,7 @@ GCP Spot 被抢占后，启动盘仍保留。benchmark 必须在每个 case 完�
 ### 软件
 
 - Linux
-- Python 3.10 或 3.11
+- Python 3.12
 - PyTorch CUDA 版本
 - Transformers
 - Accelerate
@@ -248,7 +248,7 @@ python -c "import torch; print(torch.__version__); print(torch.version.cuda); pr
 - [ ] 完成一次 32 token 左右的 greedy generation
 - [ ] 打印输入 token 数、输出 token 数、总耗时和显存峰值
 - [ ] 将输出和环境信息同步回本地
-- [ ] 用 `scripts/sync_results_from_gcp.sh ./gcp-results` 同步结果
+- [ ] 用 `scripts/sync_results_from_gcp.sh .` 同步结果到本地仓库
 - [ ] 用 `scripts/gcp_vm.sh stop` 停止 GPU 实例
 
 ### 当天验收
@@ -275,10 +275,11 @@ python -c "import torch; print(torch.__version__); print(torch.version.cuda); pr
 
 ### 计时要求
 
-- [ ] 正式计时前至少 warm up 2–3 次
+- [ ] 每个正式测量 shape 和 cache mode 先 warm up 2 次
 - [ ] GPU 操作计时前后调用 `torch.cuda.synchronize()`，或正确使用 CUDA Event
 - [ ] 不把首次模型下载时间算入推理延迟
 - [ ] 分开记录 tokenization、prefill 和 decode
+- [ ] 每个正式 run 独立记录 tokenization；核心 GPU 对比使用 inference-only 指标
 - [ ] 保存每次 run 的原始数据，不只保存平均值
 - [ ] 设置随机种子，并使用 greedy decoding 减少随机性
 
@@ -289,18 +290,26 @@ python -c "import torch; print(torch.__version__); print(torch.version.cuda); pr
 ```text
 run_id
 git_commit
+config_fingerprint
+runtime_fingerprint
 model
+model_revision
 dtype
 use_cache
 prompt_tokens
 output_tokens
 tokenization_ms
-prefill_ms
-first_token_ms
+h2d_ms
+prefill_forward_ms
+first_token_selection_ms
+inference_ttft_ms
+end_to_end_ttft_ms
+decode_ms
 mean_tpot_ms
 p50_tpot_ms
 p95_tpot_ms
 total_generation_ms
+end_to_end_ms
 output_tokens_per_second
 peak_memory_mb
 ```
@@ -485,8 +494,8 @@ use_cache = true / false
 
 1. 用 `scripts/gcp_vm.sh status` 确认 VM 状态。
 2. 用 `scripts/gcp_vm.sh start` 恢复 VM，并重新 SSH。
-3. 再次运行 `make benchmark PYTHON=.venv/bin/python`。
-4. 程序会读取相同 CSV 并跳过已经完成的 case；最多重跑中断时正在执行的一个 case。
+3. 再次运行 `make run-week01 PYTHON=.venv/bin/python`。
+4. runner 会校验相同 CSV 并跳过已完成 case，再补齐图表和 `artifacts_ready` 状态；最多重跑中断时正在执行的一个 case。
 
 ## 第一周结束后的自然衔接
 

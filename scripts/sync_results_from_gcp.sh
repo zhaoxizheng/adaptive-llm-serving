@@ -5,7 +5,7 @@ GCP_PROJECT_ID="${GCP_PROJECT_ID:-}"
 GCP_ZONE="${GCP_ZONE:-us-central1-a}"
 GCP_VM_NAME="${GCP_VM_NAME:-adaptive-llm-week01}"
 REMOTE_DIR="${REMOTE_DIR:-adaptive-llm-serving}"
-LOCAL_OUTPUT="${1:-./gcp-results}"
+LOCAL_OUTPUT="${1:-.}"
 
 if [[ -z "${GCP_PROJECT_ID}" ]]; then
   echo "Set GCP_PROJECT_ID before running this script." >&2

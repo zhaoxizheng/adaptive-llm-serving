@@ -1,6 +1,8 @@
 .DS_Store
 .env
+.experiment-source.json
 .venv/
+.verify-venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
