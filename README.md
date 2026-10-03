@@ -1,4 +1,4 @@
-# Cloud-Native LLM Serving: 22-Week Learning Roadmap
+# Cloud-Native LLM Serving: 20-Week Learning Roadmap
 
 A hands-on project that starts with measured single-GPU autoregressive inference,
 progresses through vLLM internals and same-host multi-GPU tensor parallelism, and
@@ -24,7 +24,7 @@ Direct HPA or KEDA-managed HPA -> Deployment replica count only
 Total allocated GPUs = replica count x G
 ```
 
-Start with the [22-week learning roadmap](docs/learning-roadmap.md), then use the
+Start with the [20-week learning roadmap](docs/learning-roadmap.md), then use the
 weekly execution plans and reading lists:
 
 - [Week 1 execution plan](docs/week-01-plan.md) and [references](docs/week-01-references.md)
@@ -47,10 +47,8 @@ weekly execution plans and reading lists:
 - [Week 18 execution plan](docs/week-18-plan.md) and [references](docs/week-18-references.md)
 - [Week 19 execution plan](docs/week-19-plan.md) and [references](docs/week-19-references.md)
 - [Week 20 execution plan](docs/week-20-plan.md) and [references](docs/week-20-references.md)
-- [Week 21 execution plan](docs/week-21-plan.md) and [references](docs/week-21-references.md)
-- [Week 22 execution plan](docs/week-22-plan.md) and [references](docs/week-22-references.md)
 
-### Weeks 16–22 Overview
+### Weeks 16–20 Overview
 
 Week numbers are prerequisite-based milestones, not calendar dates. The roadmap
 does not imply that earlier weeks are complete. Start each milestone only when its
@@ -64,19 +62,14 @@ with incomparable CPU results. Each week budgets about 11 hours.
 | 18 | llm-d Router/EPP: Load-aware and Precise Prefix-aware Routing | Fixed-replica routing comparison with locality/load/staleness evidence |
 | 19 | KServe `LLMInferenceService` control plane | Alpha reconciliation and generated-resource audit |
 | 20 | HPA/KEDA autoscaling and observability | Metric contract, cold-start/failure timelines, and allocated/billed GPU-hours |
-| 21 | Cloud implementation mapping and portability | GKE live run plus evidence-backed mappings for other providers |
-| 22 | Capstone: held-out, failure, rollout, and runbook | Repeated A/B results, fault matrix, compatibility table, and rollback runbook |
 
-### API, Cloud, and Evidence Boundaries
+### API and Evidence Boundaries
 
 - GAIE `InferencePool` has a stable `v1` API. That does not imply every Gateway
   implementation or every related inference API is generally available.
 - KServe `LLMInferenceService` remains an alpha API. Pin the chosen KServe
   release and verify its installed CRD schema rather than treating it as a stable
   portability contract.
-- GKE is the managed-cloud path exercised end to end. Other providers are mapped
-  from official APIs and documentation unless a weekly report explicitly records a
-  live run. The roadmap makes no provider adoption or market-share claim.
 - Deliverable paths and example conclusions are plans, not claims that features
   have been implemented or that a benchmark has already shown a gain.
 
@@ -84,7 +77,7 @@ with incomparable CPU results. Each week budgets about 11 hours.
 
 - Weeks 1–13 use the single NVIDIA L4 baseline. Week 14 includes one same-host
   dual-GPU TP cell; if that hardware is unavailable, mark it `deferred`.
-- Week 15 and performance cells in Weeks 16–22 require two complete replica slots.
+- Week 15 and performance cells in Weeks 16–20 require two complete replica slots.
   If one replica uses `G` same-node GPUs with `TP=G`, the two-replica experiments
   require `2 × G` GPUs, with each group of `G` co-located on one node. A CPU cluster
   may validate CRDs and reconciliation only.
@@ -238,9 +231,9 @@ corresponding manifests, experiments, or reports already exist.
 benchmark/           Workload definitions, runners, and analysis
 configs/             Versioned experiment configurations
 dashboards/          Cross-layer observability views
-deploy/              vLLM, Gateway/GAIE, llm-d, autoscaling, and provider manifests
-docs/                Weekly plans/references, architecture, portability, and ADRs
-reports/             Written experiment conclusions and runbooks
+deploy/              vLLM, Gateway/GAIE, llm-d, KServe, and autoscaling manifests
+docs/                Weekly plans/references, architecture, experiments, and ADRs
+reports/             Written experiment conclusions
 results/             Raw records, timelines, and environment manifests by week
 scripts/             GCP lifecycle, deployment, validation, and transfer helpers
 src/                 Inference and analysis code

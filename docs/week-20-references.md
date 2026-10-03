@@ -44,7 +44,7 @@
 | Day 3–4 | 新增 1、4；复用 Week 15 #1–2 | HPA/KEDA 响应与冷启动时间线 |
 | Day 5 | 新增 1–2 | Outage、fallback、cooldown、idle/zero |
 | Day 6 | 新增 1–4；复用 Week 18 #1–4 | 控制器 ownership、重复与 observability 复核 |
-| Day 7 | 运行数据和成本清单 | 报告与 Week 21 handoff |
+| Day 7 | 运行数据和成本清单 | 最终报告与路线收尾 |
 
 ## 阅读后的自测问题
 

@@ -69,7 +69,7 @@ total allocated GPUs = replica count × G
 ```
 
 - 若模型同时支持 TP=1 和 TP=2，先在相同两卡总预算下比较 `1 replica × TP=2` 与 `2 replicas × TP=1`，明确前者优化单副本容量/延迟，后者优化并发与故障隔离。
-- 选定下游 shape 后，Week 15–22 不再动态改变 `G` 或 TP；任何 shape 变化都是新 deployment/version，不是 autoscaling。
+- 选定下游 shape 后，Week 15–20 不再动态改变 `G` 或 TP；任何 shape 变化都是新 deployment/version，不是 autoscaling。
 - 对 TP>1 Pod，保存 `nvidia.com/gpu: G`、Pod nodeName、visible devices、vLLM parsed TP 和 local rank → GPU mapping。
 
 ## 最小实验矩阵

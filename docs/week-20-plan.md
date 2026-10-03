@@ -2,7 +2,7 @@
 
 > 时间预算：约 11 小时
 >
-> 本周主线：复用 Week 18 已固定的 vLLM `Deployment`、Gateway/GAIE/llm-d 数据面与 workload，让独立 HPA 经固定 metrics adapter、KEDA 经 Prometheus scaler 读取同一推理压力语义，分别验证互斥的单一副本写入链路、冷启动与成本口径。
+> 本周主线：复用 Week 18 已固定的 vLLM `Deployment`、Gateway/GAIE/llm-d 数据面与 workload，让独立 HPA 经固定 metrics adapter、KEDA 经 Prometheus scaler 读取同一推理压力语义，分别验证互斥的单一副本写入链路、冷启动与成本口径，并以选定路径和回退合同完成路线收尾。
 >
 > 前置：[Week 15 plan](week-15-plan.md) 的 vLLM `Deployment`、HPA/冷启动基线，以及 [Week 18 plan](week-18-plan.md) 的固定 Gateway/GAIE/llm-d 数据面；Week 19 的 KServe alpha owner 仅作独立控制面对照，不是本周默认 scale target。阅读：[Week 20 references](week-20-references.md)。下列文件均为计划产出，不代表 autoscaler 已部署或已证明节省成本。
 
@@ -133,7 +133,7 @@ billed GPU/node-hours = provider billing or node lifecycle quantity over the sam
 5. Prometheus、adapter APIService、KEDA scaler 和 KEDA metrics server 各自失败时，conditions、replicas 和请求分别怎样变化？
 6. Scale-to-zero 是否真的可唤醒并服务第一批请求，还是只证明副本能降到零？
 7. `replicas × G` 的 desired/allocated GPU 变化是否转化为 billed node/GPU-hours 变化？
-8. 最终选择 HPA 还是 KEDA 进入 Week 21，选择依据、适用边界和回退路径是什么？
+8. 最终采用 HPA 还是 KEDA，选择依据、适用边界和回退路径是什么？
 
 ## 完成标准
 
@@ -146,5 +146,5 @@ billed GPU/node-hours = provider billing or node lifecycle quantity over the sam
 - [ ] Observe-to-first-token 时间线可关联，冷启动未被压成单一 Ready 延迟。
 - [ ] Prometheus/adapter/KEDA scaler/KEDA metrics server 的分层 outage、drain、cooldown 和可选 idle/zero 行为有证据或明确 blocker。
 - [ ] Allocated 与 billed GPU/node-hours 分开，未用 Pod 缩容冒充账单节省。
-- [ ] 已为 Week 21 选择 HPA 或 KEDA 一条路径，并记录另一条路径的停用和回退方法。
+- [ ] 已选择 HPA 或 KEDA 一条最终路径，并记录另一条路径的停用和回退方法。
 - [ ] 恢复固定副本并同步证据，GPU、LB、磁盘和残留 autoscaling resources 已检查。

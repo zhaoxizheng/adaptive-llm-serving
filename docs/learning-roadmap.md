@@ -1,6 +1,6 @@
 # Learning Roadmap: 从 vLLM 到 Cloud-Native LLM Serving
 
-> 目标：用 22 周、通常每周约 10–12 小时，从理解单机 LLM 推理逐步过渡到云厂商通用的 Kubernetes 推理服务架构，并完成一个以 vLLM、Gateway API、Gateway API Inference Extension（GAIE）和 llm-d 为可移植主线的可复现项目。Prometheus 与 Kubernetes 作为已掌握的基础设施直接使用，不再安排基础学习。
+> 目标：用 20 周、通常每周约 10–12 小时，从理解单机 LLM 推理逐步过渡到云厂商通用的 Kubernetes 推理服务架构，并完成一个以 vLLM、Gateway API、Gateway API Inference Extension（GAIE）和 llm-d 为主线的可复现项目。Prometheus 与 Kubernetes 作为已掌握的基础设施直接使用，不再安排基础学习。
 
 ## 路线总览
 
@@ -17,12 +17,12 @@
     ↓
 加入 InferencePool 与 llm-d EPP
     ↓
-验证扩缩容、云可移植性、故障语义与发布回滚
+验证扩缩容、指标故障、冷启动与成本边界
 ```
 
 最终项目：
 
-> 构建一个基于 vLLM + Kubernetes Gateway API + GAIE `InferencePool` + llm-d EPP 的自适应 LLM Serving 平台，在突发流量、长短请求混合和共享前缀三类负载下，对路由、扩缩容、故障恢复与云实现边界进行可复现实验。每个 vLLM replica 必须完整运行在一台服务器内，可使用一张或多张同节点 GPU；HPA/KEDA 是主扩缩容路径，KServe `LLMInferenceService` 作为可选声明式控制面对照，不是可移植数据面的前提。
+> 构建一个基于 vLLM + Kubernetes Gateway API + GAIE `InferencePool` + llm-d EPP 的自适应 LLM Serving 平台，在突发流量、长短请求混合和共享前缀三类负载下，对路由、扩缩容、受控故障语义与资源成本进行可复现实验。每个 vLLM replica 必须完整运行在一台服务器内，可使用一张或多张同节点 GPU；HPA/KEDA 是主扩缩容路径，KServe `LLMInferenceService` 作为可选声明式控制面对照，不是主数据面的前提。
 
 这是路线唯一的生产模型执行形态：集群可以把多个独立 replicas 放在不同节点，但绝不把同一个 replica 的 GPU 或 TP ranks 拆到多个节点。
 
@@ -389,20 +389,18 @@ vLLM replica
 
 本阶段不在路线页重复外部书目；阅读顺序和首次收录来源见 [Week 16 references](week-16-references.md)、[Week 17 references](week-17-references.md) 和 [Week 18 references](week-18-references.md)。
 
-## 第七阶段：声明式控制面、扩缩容与可移植 Capstone（第 19–22 周）
+## 第七阶段：声明式控制面与扩缩容收尾（第 19–20 周）
 
 ### 每周主线
 
 - Week 19：KServe `LLMInferenceService` 声明式控制面与资源审计；固定 release，保存 alpha CRD schema、controller 生成对象、reconciliation、升级和回退证据（[计划](week-19-plan.md) / [资料](week-19-references.md)）。
 - Week 20：HPA/KEDA 扩缩容与可观测性；固定 router，校准 metric contract，分解 cold-start timeline，并比较 allocated 与 billed GPU-hours（[计划](week-20-plan.md) / [资料](week-20-references.md)）。
-- Week 21：云实现映射与可移植性验证；在 GKE 实跑一条 managed path，对 Azure、ACK、AWS 只做有官方来源的 API/capability mapping（[计划](week-21-plan.md) / [资料](week-21-references.md)）。
-- Week 22：Capstone 的 held-out、故障、发布与 runbook；冻结 router/autoscaler，完成独立重复、最小消融、fault matrix、rollback 和最终演示（[计划](week-22-plan.md) / [资料](week-22-references.md)）。
 
 KServe 是可选控制面，不取代 Week 16–18 的 portable data-plane contract。`LLMInferenceService` 当前仍是 alpha API；任何 `apiVersion`、生成资源和 upgrade 行为都以 Week 19 固定 release 的已安装 CRD 为准。Week 20 的通用 autoscaling 实验使用 vLLM `Deployment` 作为共同 `/scale` target，并且只能选择独立 HPA 或 KEDA `ScaledObject` 其中一条扩缩容路径，不能让两个 controller 或 GitOps/manual loop 同时修改副本数。
 
-### Capstone 名称
+### 最终项目名称
 
-**Portable Cloud-Native LLM Serving with Gateway API, GAIE, llm-d, and vLLM**
+**Cloud-Native LLM Serving with Gateway API, GAIE, llm-d, and vLLM**
 
 ### 系统架构
 
@@ -431,7 +429,7 @@ Prometheus → KEDA → generated HPA ────┘
 Optional control plane: KServe LLMInferenceService
 ```
 
-### 实验矩阵
+### 累计实验矩阵
 
 | 版本 | Endpoint selection | 扩缩容 | 目的 |
 |---|---|---|---|
@@ -441,25 +439,23 @@ Optional control plane: KServe LLMInferenceService
 | Candidate B | llm-d prefix-aware | 固定副本 | 验证 locality/load trade-off |
 | Candidate C | 冻结的 llm-d policy | HPA 或 KEDA | 隔离 scaling 影响 |
 
-正式结论使用 uniform、long/short mixed、shared-prefix 和 burst/ramp 的 held-out traces，并包含失败、超时和取消请求。报告 P50/P95/P99 TTFT、TPOT、goodput、error rate、routing latency、cache hit、GPU 使用、扩缩容时间线，以及 allocated/billed GPU-hours。每个正式 cell 至少三个独立 run；样本不足时只作探索性描述。
+矩阵汇总 Week 15–20 已分别定义的实验，不新增一轮最终集成测试。各周继续按自己的固定 workload、重复数和失败分母报告 P50/P95/P99 TTFT、TPOT、goodput、error rate、routing latency、cache hit、GPU 使用、扩缩容时间线，以及 allocated/billed GPU-hours；样本不足时只作探索性描述。
 
-### 云与 API 边界
+### API 与实现边界
 
 - `InferencePool` v1 是稳定 API；这不代表所有 GAIE 周边资源、gateway implementation 或云产品都处于同一稳定级别。
-- GKE 是主路线唯一要求实跑的 managed-cloud 路径。Azure、ACK、AWS 的产出是官方文档支持的 mapping，除非报告明确记录真实部署。
-- provider tutorial、reference architecture、preview feature、conformance result 和 managed GA product 必须分别标注，不能互相替代。
-- 不做市场份额、采用率或“所有云厂商都使用某实现”的推断。
+- API 规范、controller 实现、conformance result 与本项目的运行证据必须分别标注，不能互相替代。
+- 不从文档、实现列表或单一实验环境推断市场份额和普遍采用率。
 
 ### 阶段验收
 
-- [ ] 保存标准对象、KServe 生成对象和 provider-specific 资源的 ownership/compatibility matrix。
+- [ ] 保存标准对象、KServe 生成对象和所选 gateway 实现的 ownership/compatibility matrix。
 - [ ] HPA/KEDA 至少完成 burst、ramp、降载和 metric outage 四类时间线，且 replicas writer 唯一。
-- [ ] GKE 完成真实 streaming smoke 与请求归属；其他云 mapping 有明确来源和未验证边界。
-- [ ] Capstone 完成 routing 与 scaling 的最小消融，不把同时变化的控制环归因给单一组件。
-- [ ] EPP unavailable/stale、Pod drain、cold start、gateway restart 和 rollout 均有故障/恢复证据。
+- [ ] 汇总 Week 18 routing 与 Week 20 scaling 的独立对照，不把同时变化的控制环归因给单一组件。
+- [ ] EPP unavailable/stale、Pod drain、cold start 和 metric outage 均有故障/恢复证据。
 - [ ] 最终结论允许“没有改善”，不把单次 run、厂商数字或计划中的 X/Y/Z 当作本项目结果。
 
-本阶段的外部资料只在 weekly references 首次编号：见 [Week 19 references](week-19-references.md)、[Week 20 references](week-20-references.md)、[Week 21 references](week-21-references.md) 和 [Week 22 references](week-22-references.md)。
+本阶段的外部资料只在 weekly references 首次编号：见 [Week 19 references](week-19-references.md) 和 [Week 20 references](week-20-references.md)。
 
 ## 推荐仓库结构
 
@@ -472,7 +468,6 @@ adaptive-llm-serving/
 │   ├── architecture.md
 │   ├── vllm-request-lifecycle.md
 │   ├── experiment-methodology.md
-│   ├── cloud-portability.md
 │   └── results.md
 ├── deploy/
 │   ├── vllm/
@@ -481,7 +476,6 @@ adaptive-llm-serving/
 │   ├── llm-d/
 │   ├── kserve/
 │   ├── autoscaling/
-│   ├── providers/
 │   └── monitoring/
 ├── benchmark/
 │   ├── workloads/
@@ -514,18 +508,15 @@ make report
 - [ ] 可重复执行的 benchmark
 - [ ] 关联 Gateway、EPP、vLLM 与 autoscaler 的 dashboard
 - [ ] Service/RR、reference EPP、llm-d routing 与选定 autoscaler 的最小消融
-- [ ] GKE 实跑证据与 Azure/ACK/AWS capability mapping
 - [ ] 单机多卡 vLLM replica 的 TP、资源放置、rank mapping 与成本证据
 - [ ] profiling 截图或 timeline
 - [ ] 失败、blocked/deferred 实验和设计取舍记录
-- [ ] deployment、rollback 与故障恢复 runbook
-- [ ] 3–5 分钟演示视频
 - [ ] 一篇技术文章
 - [ ] 最好完成一个 vLLM、Gateway API/GAIE、llm-d 或 KServe 上游贡献
 
 ## 简历描述模板
 
-> Built a portable cloud-native LLM serving platform with vLLM, Kubernetes Gateway API, GAIE InferencePool, and llm-d EPP. Evaluated load- and prefix-aware routing plus HPA/KEDA autoscaling under bursty, long-context, and prefix-heavy workloads using P99 TTFT, goodput, routing latency, KV-cache hit rate, and allocated/billed GPU-hours; validated the managed path on GKE and documented provider mappings.
+> Built a cloud-native LLM serving platform with vLLM, Kubernetes Gateway API, GAIE InferencePool, and llm-d EPP. Evaluated load- and prefix-aware routing plus HPA/KEDA autoscaling under bursty, long-context, and prefix-heavy workloads using P99 TTFT, goodput, routing latency, KV-cache hit rate, and allocated/billed GPU-hours.
 
 实验完成后，补上实际提升数字和实验条件。
 
@@ -537,15 +528,15 @@ make report
 4. 每个性能结论必须记录硬件、模型、软件版本、参数和 workload。
 5. 先建立正确且可复现的 baseline，再进行优化。
 6. 每个实验只改变一个主要变量；单机 TP、routing 和 autoscaling 分阶段验证。
-7. API version、conformance、provider preview/GA 和实际运行证据分别记录，不推断市场份额或普遍采用率。
+7. API version、conformance、实现能力和实际运行证据分别记录，不推断市场份额或普遍采用率。
 8. GPU 或网络条件不满足时标记 blocked/deferred，不用 CPU smoke 或普通 L4/TCP 外推性能。
 9. 优先提交小而清晰的上游贡献，证明能够阅读并改动真实推理系统。
 
 ## 时间调整
 
-- 每周约 5 小时：将 22 周路线延长到约 10–11 个月；保持前置关系，不把两个 GPU-heavy milestone 硬塞进同一周。
+- 每周约 5 小时：将 20 周路线延长到约 9–11 个月；保持前置关系，不把两个 GPU-heavy milestone 硬塞进同一周。
 - 当前精简版已假设熟悉 Prometheus 与 Kubernetes：第五阶段从 3 周压缩到 1 周，Week 5 只保留 vLLM metric contract 与实验对齐。
-- GPU quota 暂缺：继续做源码阅读、manifest、schema/object graph、离线分析和 provider mapping；任何性能 cell 保持 blocked，拿到相同 GPU 条件后再补跑。
+- GPU quota 暂缺：继续做源码阅读、manifest、schema/object graph 和离线分析；任何性能 cell 保持 blocked，拿到相同 GPU 条件后再补跑。
 - 同机双卡资源暂缺：保留 Week 14 的 deployment/TP 实验设计并标记 deferred；不以不同 GPU 或不可比资源拼接结果替代。
-- 目标偏 CUDA/Kernel：增加 Triton、CUDA 和算子 profiling，减少 provider mapping 深度，但保留标准网关 contract。
+- 目标偏 CUDA/Kernel：增加 Triton、CUDA 和算子 profiling，减少控制面审计深度，但保留标准网关 contract。
 - 目标偏 AI Infra/Serving：保持当前比重，重点打磨同机 TP、EPP、扩缩容、可观测性和故障实验。
