@@ -96,3 +96,28 @@ def test_non_git_source_manifest_rejects_unlisted_executable(tmp_path, monkeypat
 
     with pytest.raises(RuntimeError, match="extra=.*stale.py"):
         common.source_identity(manifest)
+
+
+def test_critical_source_inventory_is_rooted_at_repository(tmp_path, monkeypatch) -> None:
+    repository = tmp_path / "repo"
+    (repository / "src").mkdir(parents=True)
+    (repository / "src" / "worker.py").write_text("value = 1\n", encoding="utf-8")
+    (repository / "Makefile").write_text("test:\n\ttrue\n", encoding="utf-8")
+    nested = repository / "docs"
+    nested.mkdir()
+    monkeypatch.chdir(nested)
+    monkeypatch.setattr(
+        common,
+        "_git_output",
+        lambda arguments: (
+            "a" * 40
+            if arguments == ["rev-parse", "HEAD"]
+            else str(repository)
+            if arguments == ["rev-parse", "--show-toplevel"]
+            else ""
+        ),
+    )
+
+    identity = common.source_identity()
+
+    assert set(identity["source_files"]) == {"Makefile", "src/worker.py"}

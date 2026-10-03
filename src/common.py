@@ -51,10 +51,11 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _critical_source_files() -> dict[str, str]:
+def _critical_source_files(root: Path | None = None) -> dict[str, str]:
+    source_root = (root or Path.cwd()).resolve()
     files: dict[str, str] = {}
-    for raw_path in sorted(_actual_critical_source_paths(Path.cwd())):
-        path = Path(raw_path)
+    for raw_path in sorted(_actual_critical_source_paths(source_root)):
+        path = source_root / raw_path
         if not path.is_file():
             raise RuntimeError(f"Unable to read source file: {raw_path}")
         files[raw_path] = _sha256_file(path)
@@ -97,7 +98,11 @@ def source_identity(
                 ":(exclude)results/**",
             ]
         )
-        source_files = _critical_source_files()
+        repository_root_text = _git_output(["rev-parse", "--show-toplevel"])
+        if repository_root_text is None:
+            raise RuntimeError("Cannot resolve the Git repository root")
+        repository_root = Path(repository_root_text)
+        source_files = _critical_source_files(repository_root)
         critical_changes = _git_output(
             [
                 "status",
