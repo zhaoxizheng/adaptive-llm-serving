@@ -21,14 +21,14 @@
 - [Week 4 references](week-04-references.md) #7：逐 replica 的 queue、request、token 和 KV 指标。
 - [Week 5 references](week-05-references.md)：复用已有 metric contract 和 run 对齐方法，不重做监控基础建设。
 - [Week 4 references](week-04-references.md) #10：实例内 APC 的 cache 状态，不能假设两个 replicas 自动共享 KV。
-- [Week 14 references](week-14-references.md) #1：区分一个跨 GPU 的 model replica 与多个独立 replicas。
+- [Week 14 references](week-14-references.md) #1：区分一个使用同节点多张 GPU 的 model replica 与多个独立 replicas。
 
 ## 实验前必须检查的本地证据
 
 - 固定版本的 vLLM serve help、health endpoint 与 signal/shutdown 行为。
 - Gateway 的实际 LB 配置、HTTP connection reuse、SSE buffering、retry 和 timeout 规则。
 - 集群 CPU metrics 是否可用、HPA targets/status/events 是否有效。
-- 每个 Pod 的 GPU allocation、model/image cache 状态、node pool 最大值和当前配额。
+- 每个 Pod 的 `nvidia.com/gpu` allocation、TP size、node identity、local rank mapping、model/image cache 状态、node pool 最大值和当前配额。
 
 这些属于执行时的环境验证，不能用通用文档代替；不另行安装新 gateway 或 metrics 栈来扩大本周范围。
 
@@ -51,4 +51,4 @@
 4. `preStop` 与 grace period 如何共同影响长 streaming request？
 5. 为什么已经输出 token 的请求不能安全地由代理自动重试？
 6. HPA desired replicas 已经增加，为什么 SLO 仍可能持续恶化？
-7. 固定双副本和 1–2 副本 HPA 的对比应如何说明 GPU 成本差异？
+7. 若每个 replica 使用 `G` 张同节点 GPU，固定双副本和 1–2 副本 HPA 的对比应如何按 `replicas × G` 说明 GPU 成本差异？

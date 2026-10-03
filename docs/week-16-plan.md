@@ -2,7 +2,7 @@
 
 > 时间预算：约 11 小时
 >
-> 本周主线：在 Week 15 的固定双副本 vLLM baseline 上，用 Gateway API core v1 建立可审计的 L7 matching、traffic splitting、状态与失败语义，为 Week 17 的 InferencePool 数据路径提供稳定对照。
+> 本周主线：在 Week 15 的固定双副本 vLLM baseline 上，用 Gateway API core v1 建立可审计的 L7 matching、traffic splitting、状态与失败语义。每个 replica 沿用 `1 Pod / 1 node / G GPUs / TP=G`，为 Week 17 的 InferencePool 数据路径提供稳定对照。
 >
 > 前置：[Week 15 plan](week-15-plan.md) 的双副本、request-level attribution 与 streaming baseline；阅读：[Week 16 references](week-16-references.md)。下列文件均为计划产出，不代表仓库中已实现或已经验证。
 
@@ -18,7 +18,7 @@
 
 - 只使用 `gateway.networking.k8s.io/v1` 的 core 资源和 `HTTPRoute` 主路径；不接入 GAIE、`InferencePool`、EPP 或 llm-d。
 - Gateway API core v1 表示 API 的稳定边界，不表示每个 controller 都支持规范中的全部可选能力、filter 或一致行为；实现支持度必须由固定 release 的 conformance 声明、status 和 runtime 证据共同确认。
-- 固定两个同型号 L4 GPU slots、两个独立 vLLM replicas、模型/revision、engine args 与 workload；关闭 HPA/其他 autoscaler。
+- 固定两个独立 vLLM replicas、模型/revision、engine args、`gpus_per_replica=G` 与 `tensor_parallel_size=G`；每个 Pod 的 GPU 必须位于同一 node，集群需提供 `2 × G` 个同型号 GPU slots。关闭 HPA/其他 autoscaler。
 - 所有 cross-namespace 引用先排除，backend 与 route 放在同一实验 namespace，避免把 `ReferenceGrant` 变量混入本周。
 - 不比较 GAIE 或自定义调度算法，不实现 retry policy、鉴权平台或多租户治理；只记录 controller 的现有默认值。
 - 仅在独立实验集群使用合成请求。入口默认 private/internal；不把未鉴权的模型 endpoint 暴露到公网。
@@ -109,6 +109,7 @@ HTTPRoute parent status  → Accepted / reference resolution evidence
 - [ ] Day 1 compatibility/capability matrix 含 CRD、controller、images、schema 与实现支持证据。
 - [ ] GatewayClass/Gateway/HTTPRoute 的 generation、conditions 和 parent status 已保存并与 runtime 对齐。
 - [ ] Request ID 可关联 route、backend 与 Pod，SSE streaming/取消没有被静默改写。
+- [ ] 两个 endpoint 均绑定同一 `1 Pod / 1 node / G GPUs / TP=G` shape，Gateway 只选择 replica，不感知 GPU/rank。
 - [ ] 100/0、50/50、90/10 及 path/header cells 使用固定配置、足够样本和至少三个重复。
 - [ ] 无匹配、invalid backend 与未就绪 endpoint 有明确且分开的失败证据。
 - [ ] 报告区分规范稳定性、实现支持度与本次实验结果，不泛化到所有 Gateway API 实现。

@@ -19,7 +19,7 @@
 
 - llm-d 是面向生产的开源推理栈并处于 CNCF Sandbox；这不等于所有 Kubernetes、gateway、云厂商或托管环境都提供通用兼容、SLA 或自动运维保证。
 - 不写死 precise-prefix plugin 字段名。配置入口会随 release 漂移；执行时绑定 llm-d release/chart values、source commit 与实际 rendered config，并保存 plugin pipeline 顺序。
-- 固定 Week 17 的 Gateway implementation、GAIE v1.0.0 `InferencePool` contract、两个同型号 L4 GPU slots、vLLM/model/revision、APC 与 workload；关闭 HPA/PodAutoscaler。
+- 固定 Week 17 的 Gateway implementation、GAIE v1.0.0 `InferencePool` contract、两个 replica 的 `1 Pod / 1 node / G GPUs / TP=G` shape、vLLM/model/revision、APC 与 workload；关闭 HPA/PodAutoscaler。
 - Reference EPP 只保留为 Week 17 conformance/learning 证据，不进入本周性能矩阵；llm-d 与 reference EPP 不是生产质量的等价 A/B。
 - 不部署 distributed KV tensor transfer、PD disaggregation、新存储层或多租户优先级；本周只研究 endpoint selection。
 - Preble 只用于理解 locality/load tradeoff，不复刻论文系统或声称复现论文结果。
@@ -123,6 +123,7 @@ Client → Gateway / HTTPRoute → ext_proc
 - [ ] llm-d release/chart/source commit、images、values 与 rendered pipeline 全部可追溯。
 - [ ] Load-aware 与 precise prefix-aware 在同一 Gateway/InferencePool、双副本、APC 和非实验配置下对照。
 - [ ] Request decision、最终 Pod、predicted prefix 与 engine reuse 可关联，未以 affinity 冒充 cache hit。
+- [ ] llm-d 只在完整 replica endpoints 之间选择；Pod 内 `G`、TP 和 local ranks 在所有路由 cells 中保持不变。
 - [ ] 四类 workload 有独立重复、cold/warm 成本、负收益和分组 SLO 证据。
 - [ ] Stale/missing、Pod replacement、cache churn、EPP failure 和恢复均有结果或明确 blocker。
 - [ ] 报告区分 llm-d 项目定位、本次固定部署能力和通用 managed guarantee，不越界泛化。

@@ -18,7 +18,7 @@
 
 - `LLMInferenceService` 当前按 alpha API 学习；即使在线页面出现 `v1alpha1` 与 `v1alpha2` 示例，也只以所选 release 实际安装的 CRD、schema、controller image 和 admission 行为为准。
 - 本周做 declarative control-plane/resource audit，不做跨控制面的性能比较，也不把安装成功写成 production readiness。
-- 只部署单节点、单模型、固定 `replicas` 的最小路径；不启用 WVA/KEDA、PD disaggregation、多节点 LWS、LoRA 或 KV offload。
+- 只部署每个 model replica 都完整落在单节点内的固定 `replicas` 最小路径；记录 `gpus_per_replica`、TP args 和 Pod/node placement，不启用动态 autoscaler、PD disaggregation、LoRA 或 KV offload。
 - 使用一个已验证支持 GAIE 的 gateway provider；Gateway API 是规范、provider 是实现，不能把两者能力等同。
 - CRD 和 cluster-scoped controller 影响不受 namespace 完全隔离；安装、升级和删除前先审查渲染结果与当前 kube context。
 - 若固定 release 与现有 GPU 集群不兼容，可先做 CPU/control-plane reconcile 和 server stub；这只能证明资源行为，不能替代真实 GPU generation smoke。
@@ -43,7 +43,8 @@ Day 1 必须先冻结下表；网页 `latest` 只用于导航，不能成为运�
 | Gateway | Gateway API CRDs、provider/controller release、GatewayClass 与 supported features/status |
 | GAIE | release、`InferencePool` 等实际安装的 group/version/schema、EPP image digest |
 | Runtime | vLLM image digest、model/revision、served model name、port、readiness 和资源 requests/limits |
-| 可选依赖 | 只记录本次路径实际需要的 cert-manager/LWS 等；未启用组件明确标成 not installed |
+| Replica shape | `gpus_per_replica=G`、TP args、Pod/node placement 与 visible GPU/rank evidence |
+| 可选依赖 | 只记录本次路径实际需要的 cert-manager 等；未启用组件明确标成 not installed |
 
 若所选 KServe release 文档示例和 CRD 不一致，以 `kubectl explain`、discovery、导出的 CRD OpenAPI schema 和 controller behavior 为运行事实，并在报告中保留差异。不要自行把 `v1alpha1` manifest 改成 `v1alpha2` 后就声称兼容。
 
@@ -90,7 +91,7 @@ Day 1 必须先冻结下表；网页 `latest` 只用于导航，不能成为运�
 4. `Ready=True/False` 汇总了哪些子条件，它是否与真实可生成 token 的时刻一致？
 5. 直接编辑生成资源为什么会产生 drift，正确变更入口是什么？
 6. 删除父对象后哪些资源消失、哪些保留，shared 与 cluster-scoped 资源的风险是什么？
-7. Week 20 若引入 autoscaler，谁能写 replicas，哪些字段/资源必须从本周 fixed-replica contract 改变？
+7. Week 20 若引入 autoscaler，独立 HPA 或 KEDA-managed HPA 中哪一条路径拥有 scale target，哪些字段/资源必须从本周 fixed-replica contract 改变？
 
 ## 完成标准
 

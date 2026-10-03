@@ -1,14 +1,14 @@
 # Week 14 Reference Reading
 
-第十四周围绕受控 A/B 阅读，不再扩展工具列表。重点是 chunked prefill、CUDA Graph 和 TP 分别改变什么，以及如何避免混杂因素。
+第十四周围绕受控 A/B 阅读，不再扩展工具列表。重点是 chunked prefill、CUDA Graph 和同一主机内 TP 分别改变什么，以及如何避免混杂因素。
 
 以下官方页面已于 2026-09-14 在线核对；原 `serving/distributed_serving/` 入口已失效，使用当前 Parallelism and Scaling 页面。实际参数和默认值仍以固定 vLLM revision 为准。
 
 ## 新增必读：Parallelism
 
 1. [vLLM Parallelism and Scaling](https://docs.vllm.ai/en/latest/serving/parallelism_scaling/)
-   - 阅读单模型 replica 的 distributed inference strategies、single-node deployment 与通信排障。
-   - 先区分模型是否放得下、增加 GPU 的吞吐收益，以及通信成本；本周不要求多节点部署。
+   - 阅读单模型 replica 的 single-node multi-GPU deployment、`--tensor-parallel-size` 与通信排障。
+   - 先区分模型是否放得下、增加 GPU 的吞吐收益，以及节点内通信成本；一个 replica 的全部 ranks 必须留在同一主机。
 
 ## 需要复用的前置资料
 

@@ -37,15 +37,11 @@
    - 映射 Envoy Gateway/GAIE、smart routing 与 ACK control-plane responsibility。
    - 厂商扩展、安装渠道和 metric integration 单列，不包装成 upstream standard fields。
 
-8. [AWS: Disaggregated Inference on AWS Powered by llm-d](https://aws.amazon.com/blogs/machine-learning/introducing-disaggregated-inference-on-aws-powered-by-llm-d/)
-   - 了解 EKS 上 llm-d 的官方架构映射；博客是实现说明，不是稳定 API 或普遍 production adoption 证据。
-   - 本周不部署 PD disaggregation，只抽取 gateway/router/workload/observability 角色。
-
-9. [Amazon SageMaker HyperPod: Inference Gateway](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-model-deployment-inference-gateway.html)
+8. [Amazon SageMaker HyperPod: Inference Gateway](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-hyperpod-model-deployment-inference-gateway.html)
    - 区分 GAIE-compatible concepts 与 HyperPod 专有资源/lifecycle。
    - `InferenceEndpointConfig` 等 AWS 对象不写成 upstream GAIE API，也不与 EKS portable path 混为一谈。
 
-10. [GAIE: Gateway Implementations](https://gateway-api-inference-extension.sigs.k8s.io/implementations/gateways/)
+9. [GAIE: Gateway Implementations](https://gateway-api-inference-extension.sigs.k8s.io/implementations/gateways/)
     - 只把列表作为进一步核对 provider 文档的导航，不当作完整认证矩阵、采用率或统一 feature set。
     - 每个实现的 conformance、API version 和 production status 仍需分别验证。
 
@@ -58,7 +54,7 @@
 | [Week 17 references](week-17-references.md) #7 | 固定 gateway 实现中的 ext_proc timeout/failure/stats |
 | [Week 18 references](week-18-references.md) #1–4 | llm-d Router/EPP architecture、plugin pipeline 与 source pinning |
 | [Week 19 references](week-19-references.md) #1–4 | KServe alpha LLMInferenceService 的声明、依赖和 status |
-| [Week 20 references](week-20-references.md) #1–5 | KEDA/adapter/WVA unique-writer 与 metrics plumbing；只在 GKE 选定路径需要时复用 |
+| [Week 20 references](week-20-references.md) #1–4 | KEDA/adapter unique-writer 与 metrics plumbing；只在 GKE 选定路径需要时复用 |
 
 ## 阅读顺序
 
@@ -68,8 +64,8 @@
 | Day 2 | 新增 2 | GKE preflight、部署与资源 status |
 | Day 3 | 新增 3–4 | 请求验证与 API/version skew |
 | Day 4 | GKE runtime 证据；复用 Week 17 #7 | 故障、恢复和实现行为 |
-| Day 5 | 新增 5–7、10 | Azure/ACK mapping |
-| Day 6 | 新增 8–10 | AWS mapping 与跨云差异表 |
+| Day 5 | 新增 5–7、9 | Azure/ACK mapping |
+| Day 6 | 新增 8–9 | AWS mapping 与跨云差异表 |
 | Day 7 | 来源快照、live results 和 gaps | 报告与 cleanup |
 
 ## 阅读后的自测问题

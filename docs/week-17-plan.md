@@ -4,7 +4,7 @@
 >
 > 本周主线：在 Week 16 的 Gateway API v1 baseline 上固定 GAIE v1.0.0，验证 `InferencePool` v1、reference Endpoint Picker (EPP) 与 gateway `ext_proc` 数据路径，并把 conformance/学习用途和生产选型严格分开。
 >
-> 前置：[Week 16 plan](week-16-plan.md) 的 Gateway/HTTPRoute contract、双副本 workload 与请求归属证据；阅读：[Week 17 references](week-17-references.md)。下列文件均为计划产出，不代表仓库中已实现、已经通过 conformance 或可用于生产。
+> 前置：[Week 16 plan](week-16-plan.md) 的 Gateway/HTTPRoute contract、固定单节点 GPU/TP shape 的双副本 workload 与请求归属证据；阅读：[Week 17 references](week-17-references.md)。下列文件均为计划产出，不代表仓库中已实现、已经通过 conformance 或可用于生产。
 
 ## 本周目标
 
@@ -21,7 +21,7 @@
 - Gateway API core v1 的稳定边界与 `InferencePool` v1 的稳定边界分别陈述；GAIE 不改变 Week 16 已验证的 core resource contract。
 - Reference EPP 只用于 conformance、互操作学习与数据路径验证。生产环境应实现自己的 EPP 或评估 llm-d-router；本周不把 reference EPP 做容量认证。
 - 不写死 reference EPP 的安装命令。GAIE CRDs 只使用固定 v1.0.0 release manifests；reference EPP 从与该 release 对齐的 conformance 文档/源码入口另行固定 revision 和 image digest。安装前审查 rendered resources，并以实际 schema、resource status 和 runtime 证据验收。
-- 固定两个同型号 L4 GPU slots、vLLM images、模型/revision、workload 与 Gateway 实现；关闭 HPA/PodAutoscaler，不研究 autoscaling 或 prefix-aware routing。
+- 固定两个独立 replicas 的 `1 Pod / 1 node / G GPUs / TP=G` shape、vLLM images、模型/revision、workload 与 Gateway 实现；关闭 HPA/PodAutoscaler，不研究 autoscaling 或 prefix-aware routing。
 - 只使用合成流量和独立实验集群；不把 `FailOpen` 当作绕过鉴权、策略或安全检查的默认生产选择。
 
 ## 本周最终产出
@@ -116,6 +116,7 @@ InferencePool controller/status → pool membership and readiness evidence
 - [ ] GAIE v1.0.0 CRD release/manifests/schema、Gateway compatibility，以及另行固定的 reference EPP revision/image digest 均可追溯。
 - [ ] `inference.networking.k8s.io/v1` InferencePool 的 selector、targetPorts、endpointPickerRef、status 均有 runtime 证据。
 - [ ] Reference EPP 到最终 Pod 的 request-level 数据路径可追踪，streaming/取消语义已验证。
+- [ ] `InferencePool` 中每个 endpoint 都代表一个完整的单节点 `G`-GPU replica，而不是某个 TP rank。
 - [ ] FailClose、FailOpen 和默认 FailClose 有受控故障结果，无隐藏或未解释 dispatch。
 - [ ] Conformance 结果精确到运行版本与范围，未提升为生产性能或通用实现保证。
 - [ ] Reference EPP 明确只用于 conformance/学习；生产候选指向自有 EPP 或 Week 18 的 llm-d-router 评估。

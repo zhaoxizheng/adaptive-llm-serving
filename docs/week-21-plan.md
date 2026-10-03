@@ -19,6 +19,7 @@
 - 只有 GKE 是本周 live path；Azure、ACK、AWS 均为 desk mapping，不创建资源、不跑性能、不比较延迟或价格。
 - GKE Inference Gateway powered by llm-d 是目标产品路径；不要将其泛称为 Cloud Service Mesh，外围 mesh 也不等于 inference routing implementation。
 - Portable data plane 只包含 Kubernetes 上的 vLLM、Gateway API、GAIE 与明确版本的 llm-d Router/EPP contract；KServe alpha owner、HPA/KEDA scaler、provider CRD、IAM、LB、node provisioning 单列 control-plane/provider adapters。
+- Portable workload 固定 `1 Pod / 1 node / G GPUs / TP=G`；provider mapping 必须记录每副本 GPU 数与同节点可放置性，但不声称不同云的 GPU topology 等价。
 - “官方支持/文档描述”只代表当前页面声称的范围；未亲自运行的云不能标为 verified、conformant、production-ready 或 feature parity。
 - 不为追求跨云对称性部署四套 GPU 集群，不扩展到跨云流量、灾备或成本基准。
 - 若 GKE 要求不同模型/GPU 或 GAIE API migration，先记录 deviation；不改写 Week 18/20 的历史 baseline。GKE 示例中的 `InferenceObjective` 等 provider/experimental API 必须按实际 group/version 单列，不能并入稳定的 `InferencePool` v1 portability claim。
@@ -42,7 +43,7 @@ Client
   ↕ Prometheus-compatible metrics
   → provider-neutral metrics/SLO evidence
 
-Optional control-plane adapters: KServe LLMInferenceService (alpha), HPA/KEDA/WVA scaling path
+Optional control-plane adapters: KServe LLMInferenceService (alpha), HPA or KEDA scaling path
 Provider adapters: GatewayClass/LB, IAM/identity, GPU nodes, storage, metrics plumbing
 ```
 
@@ -57,7 +58,7 @@ Provider adapters: GatewayClass/LB, IAM/identity, GPU nodes, storage, metrics pl
 
 ## GKE Live Validation
 
-1. 固定 GKE mode/version/location、GatewayClass、Inference Gateway feature/API、GAIE resources、llm-d artifacts、vLLM image/model 和 GPU node pool；若使用 `InferenceObjective`，保存其实际 `inference.networking.x-k8s.io` alpha group/version/schema。
+1. 固定 GKE mode/version/location、GatewayClass、Inference Gateway feature/API、GAIE resources、llm-d artifacts、vLLM image/model、`gpus_per_replica=G`、TP degree 和 GPU node pool；若使用 `InferenceObjective`，保存其实际 `inference.networking.x-k8s.io` alpha group/version/schema。
 2. 部署最小单模型路径，保存 Gateway/HTTPRoute/InferencePool 以及 provider/experimental `InferenceObjective` 的 status、EPP/Pod identity、endpoint membership 和 provider-created resources。
 3. 发出 non-streaming 与 streaming 请求，用 request/run ID 证明 Gateway → EPP decision → selected vLLM Pod；记录 TTFT/TPOT 只作运行 smoke，不做跨云性能结论。
 4. 使一个 backend NotReady，验证 endpoint removal、新请求和既有 stream；短暂停止 EPP 时记录固定实现的 failure mode 与恢复。
@@ -70,7 +71,7 @@ Provider adapters: GatewayClass/LB, IAM/identity, GPU nodes, storage, metrics pl
 |---|---|---|---|---|
 | Gateway implementation | GKE Inference Gateway / GKE Gateway | Application Gateway for Containers inference gateway | ACK Gateway with Inference Extension | EKS llm-d reference path；HyperPod proprietary path 另列 |
 | Inference backend API | 实测稳定 `InferencePool` v1；`InferenceObjective` alpha 另列 | 官方页所述 InferencePool/EPP | 官方页所述 GAIE resources | EKS 的标准 API mapping 与 HyperPod `InferenceEndpointConfig` 分栏 |
-| Model workload | GKE deployment example 的实际 object | AKS/KAITO 只作为 workload provisioning mapping | Cloud Native AI Suite/vLLM mapping | EKS vLLM 或 HyperPod endpoint mapping |
+| Model workload | 实际 object、每 replica GPU/TP 与单节点 placement | AKS/KAITO 只作为 workload provisioning mapping | Cloud Native AI Suite/vLLM mapping | EKS vLLM 或 HyperPod endpoint mapping |
 | Routing extension | 实际 llm-d Router/EPP artifact | 官方 provider/EPP description | 官方 smart routing/provider description | 官方 llm-d/HyperPod description |
 | Autoscaling | fixed 或 Week 20 单 writer | 只记录文档机制和待验证项 | 只记录文档机制和待验证项 | 只记录 EKS/HyperPod 文档机制和待验证项 |
 | Identity/observability | 实测 IAM/service account、metrics/logs | 官方 auth/metrics mapping | 官方 RAM/metrics mapping | 官方 IAM/CloudWatch/Prometheus mapping |
@@ -113,6 +114,7 @@ Provider adapters: GatewayClass/LB, IAM/identity, GPU nodes, storage, metrics pl
 
 - [ ] Portable data plane、可选 control-plane adapters 与 GKE adapter 分层，所有版本、images、features 和 API schemas 可追溯。
 - [ ] GKE 路径有 resource status、request attribution、streaming、backend/EPP failure 与恢复证据。
+- [ ] 每个 replica 的 GPU/TP shape 和单节点 placement 有 live evidence，provider mapping 始终保持完整单节点副本语义。
 - [ ] GKE smoke 未被夸大为跨云性能或生产结论。
 - [ ] Azure、ACK、AWS mapping 每格都附官方来源和 evidence state，未强制部署。
 - [ ] 未把文档存在、实现列表或营销措辞推断为采用率、feature parity、SLA 或 conformance。

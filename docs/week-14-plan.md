@@ -1,8 +1,8 @@
-# Week 14 Plan: Chunked Prefill、CUDA Graph 与 Parallelism 受控优化
+# Week 14 Plan: Chunked Prefill、CUDA Graph 与单机多卡 TP
 
 > 时间预算：约 11 小时，包含约 2.5 小时的双卡实验窗口
 >
-> 本周主线：把 Week 11–13 的证据转成可重复的优化 A/B，选择供 Week 15 使用的单实例 operating point，而不是叠加所有优化开关。
+> 本周主线：把 Week 11–13 的证据转成可重复的优化 A/B，并正式验证“一个逻辑 vLLM replica 在一台服务器内使用一张或多张 GPU”的部署形态，为 Week 15 冻结每副本资源规格。
 >
 > 前置：[Week 13 plan](week-13-plan.md) 的瓶颈证据和无 profiler baseline；阅读：[Week 14 references](week-14-references.md)。下列文件是待完成产出。
 
@@ -10,26 +10,29 @@
 
 1. 用 workload 分组结果解释 token budget 对 TTFT/TPOT 的权衡。
 2. 隔离 CUDA Graph 与 compilation、batch shape 等混杂因素。
-3. 区分 TP 的模型容量价值、延迟变化和 GPU 成本。
+3. 区分同一主机内 TP 的模型容量价值、延迟变化和 GPU 成本。
 4. 选出满足 SLO、质量与显存约束的配置，而非只选 tokens/s 最大值。
-5. 完成单实例阶段报告，为多副本实验冻结后端配置。
+5. 冻结 `gpus_per_replica`、`tensor_parallel_size` 与单节点放置约束，为多副本实验提供完整 replica shape。
 
 ## 本周边界
 
 - 单卡主线固定 Week 13 的硬件、模型、dtype、backend 和 arrival trace。
 - 每组实验只改变一个主变量，候选确定后才做组合回归。
 - Quantization 复用 Week 6 已验证结论，本周不再引入新量化格式。
-- 不实现新 scheduler、kernel 或多节点 TP；不进入集群级网关/路由。
+- 每个逻辑 replica 必须完整落在一台主机内；本周只研究节点内 TP，不引入多 Pod replica 或远端 worker。
+- 一个 replica 定义为一个 API endpoint、一个 vLLM engine/process group 和 `G` 张同节点 GPU；默认要求 `tensor_parallel_size = G`，除非固定版本官方文档明确支持并验证其他形态。
+- 不实现新 scheduler 或 kernel，不进入集群级网关/路由。
 - 所有容量、延迟和成本结论来自无 profiler runs；短 profiling 仅解释差异。
 
 ## 本周最终产出
 
 - `configs/week14-optimization.yaml`：baseline、chunk budget、graph modes 和 SLO。
 - `configs/week14-tp.yaml`：双卡型号、拓扑、TP 配置与对照矩阵。
+- `deploy/vllm/single-node-multigpu/`：一个 Pod 申请 `G` 张同节点 GPU、以 `TP=G` 启动的可重放 manifest。
 - `scripts/run_week14_optimization.sh`：分组 A/B、重复和失败退出。
 - `results/week14/`：逐请求原始数据、配置、短 trace 与成本清单。
 - `reports/week14.md`：性能 Pareto 对比、失败实验和最终选择。
-- `configs/serving-baseline.yaml`：Week 15 固定的模型、engine args 和 workload contract。
+- `configs/serving-baseline.yaml`：Week 15 固定的模型、engine args、`gpus_per_replica`、`tensor_parallel_size`、GPU topology 和 workload contract。
 
 ## 三组实验
 
@@ -54,6 +57,25 @@
 
 租用同一台双卡机器，记录 GPU 型号、数量、互联、CPU、CUDA/NCCL 和模型版本。先做 TP=1、TP=2 的输出与通信 smoke。
 
+本周需要保存固定版本实际支持的命令及解析后配置。命令形态如下，参数名与默认值最终以固定镜像内 `vllm serve --help` 为准：
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1 vllm serve "$MODEL" \
+  --tensor-parallel-size 2 \
+  --pipeline-parallel-size 1
+```
+
+Kubernetes deployment smoke 使用一个 Pod 申请完整资源：
+
+```yaml
+resources:
+  limits:
+    nvidia.com/gpu: 2
+args: ["--tensor-parallel-size", "2", "--pipeline-parallel-size", "1"]
+```
+
+Pod 天然只调度到一个 node；验收仍须保存 Pod → node、可见 GPU、local rank → GPU 和 `nvidia.com/gpu` allocation 证据，不能仅凭 YAML 推断 TP ranks 位于同一主机。
+
 | 对照 | 固定什么 | 可以回答什么 |
 |---|---|---|
 | 同一主机 TP=1 vs TP=2 | 模型、dtype、请求 trace；GPU 数不同 | 增加一张卡后的 latency、capacity 和成本变化 |
@@ -61,6 +83,7 @@
 
 - Week 14 不跨不同机型计算“TP speedup”；不能把单卡 L4 与另一种双卡硬件直接做因果对照。
 - 模型必须同时能以 TP=1 和 TP=2 运行，且 head/partition 配置受支持；否则只报告模型容量验证。
+- 启动前断言 allocated/visible GPU 数、`gpus_per_replica` 与 TP degree 一致；任一 rank 不在同一 node 时该 cell 失败。
 - 记录 TP 通信区间、per-GPU memory、端到端 latency、总 throughput 和 GPU-seconds/request。
 - 若没有双卡预算或 quota，完成配置、代码阅读和实验设计，将 TP 标记为 deferred，不编造多卡结果；Week 15 的真实双副本资源仍需单独满足。
 
@@ -90,7 +113,7 @@
 1. 更大的 token budget 帮助了谁，又损害了哪一类请求？
 2. Graph 改变的是 launch overhead、execution mode、KV capacity，还是多个因素？
 3. 每个优化的启动时间、稳态延迟和显存代价是什么？
-4. TP 结论是在增加 GPU 预算下成立，还是同预算下已验证？
+4. `1 Pod / 1 host / G GPUs / TP=G` 如何从资源、进程和 rank 证据得到验证？TP 结论是在增加 GPU 预算下成立，还是同预算下已验证？
 5. 最终配置在哪些 workload 不占优，是否仍满足 SLO？
 6. 哪些变量必须固定，Week 15 才能把变化归因到路由或副本数？
 
@@ -100,6 +123,7 @@
 - [ ] Compilation、shape、KV blocks 等混杂因素被控制或明确披露。
 - [ ] 候选组合通过全部 workload 回归，失败和负收益也保留。
 - [ ] 双卡 TP 有受控结果；硬件阻塞时单独标记未完成/deferred。
-- [ ] 固定 serving baseline 可供下一周复用，没有偷偷变更模型或 dtype。
+- [ ] 至少完成一个 `1 Pod / 1 host / 2 GPUs / TP=2` deployment smoke，保存 node、GPU visibility、rank mapping 与 endpoint 证据；硬件不足时明确 deferred。
+- [ ] 固定 serving baseline 可供下一周复用，包含 `gpus_per_replica` 与 `tensor_parallel_size`，没有偷偷变更模型或 dtype。
 - [ ] Week 11–14 形成至少一条由 profiler 证据解释的服务优化结论；无收益也是有效结论。
 - [ ] GPU、磁盘等成本已记录，原始结果同步并绑定 Git commit。

@@ -13,10 +13,10 @@
 
 2. [KServe: LLMInferenceService Configuration](https://kserve.github.io/website/docs/model-serving/generative-inference/llmisvc/llmisvc-configuration)
    - 阅读 config composition、`baseRefs`、workload、router 和 managed/referenced resources。
-   - 特别核对 `replicas`、`scaling` 的互斥和当前 CRD schema；示例 API version 不等于所选 release 的可用 version。
+   - 特别核对固定 `replicas` contract、当前 CRD schema，以及所选 release 生成的 child workload 是否暴露可被外部 autoscaler 管理的 `/scale`；示例 API version 不等于所选 release 的可用 version。
 
 3. [KServe: LLMInferenceService Dependencies](https://kserve.github.io/website/docs/model-serving/generative-inference/llmisvc/llmisvc-dependencies)
-   - 区分 Gateway API 规范、GAIE CRDs、gateway provider、EPP 与可选 LWS。
+   - 区分 Gateway API 规范、GAIE CRDs、gateway provider 与 EPP；本路线的 model replica 必须保持单 Pod、单节点。
    - 依赖顺序和版本号只作为起点，安装前与固定 KServe release 的 compatibility evidence 对齐。
 
 4. [KServe: LLMInferenceService Status Reference](https://kserve.github.io/website/docs/model-serving/generative-inference/llmisvc/llmisvc-status)
@@ -61,4 +61,4 @@ Release 页面是版本锁定入口，不增加通读任务。真正的执行合
 4. 哪些资源由 KServe 创建，哪些可以引用外部对象，如何从 owner references 证明？
 5. 顶层 `Ready=True` 是否足以证明首个 token 成功，为什么？
 6. 为什么 namespace 不能完全隔离 CRD/controller 安装与删除风险？
-7. 下一周启用 autoscaling 时，`spec.replicas`、scale subresource 与 actuator 的 ownership 如何变化？
+7. 下一周启用 autoscaling 时，独立 HPA 或 KEDA-managed HPA 如何互斥地拥有 scale target，固定 replicas 又如何停止覆盖？

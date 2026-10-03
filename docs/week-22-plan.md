@@ -2,7 +2,7 @@
 
 > 时间预算：约 11 小时
 >
-> 本周主线：冻结本项目的 capstone stack，在未用于调参的 held-out workloads 上完成最终对照，并用故障注入、受控 rollout/rollback 和值班 runbook 收尾；portable data plane 是 vLLM + Gateway API + GAIE + llm-d，KServe 是可选 alpha 声明式 owner，扩缩容恰好选择 HPA 或 KEDA 一条 writer path（WVA 仅兼容时选做）。
+> 本周主线：冻结本项目的 capstone stack，在未用于调参的 held-out workloads 上完成最终对照，并用故障注入、受控 rollout/rollback 和值班 runbook 收尾；portable data plane 是 vLLM + Gateway API + GAIE + llm-d，KServe 是可选 alpha 声明式 owner，扩缩容恰好选择 HPA 或 KEDA 一条 writer path。
 >
 > 前置：[Week 18 plan](week-18-plan.md) 的路由策略、[Week 19 plan](week-19-plan.md) 的声明式控制面、[Week 20 plan](week-20-plan.md) 的单 writer 扩缩容、[Week 21 plan](week-21-plan.md) 的 GKE live path；阅读：[Week 22 references](week-22-references.md)。下列文件均为计划产出，不代表 benchmark、故障或发布已经完成。
 
@@ -16,10 +16,11 @@
 
 ## 本周边界
 
-- Portable data plane 绑定 vLLM、Gateway API、GAIE 与 llm-d Router/EPP 的固定 releases；KServe alpha owner 和 HPA/KEDA/WVA 属于本次实验选择的 control-plane adapters，不把它们写成稳定、必选的 portability API。GKE 仅是执行环境，不将结论外推到未运行云。
+- Portable data plane 绑定 vLLM、Gateway API、GAIE 与 llm-d Router/EPP 的固定 releases；KServe alpha owner 以及 HPA/KEDA 属于本次实验选择的 control-plane adapters，不把它们写成稳定、必选的 portability API。GKE 仅是执行环境，不将结论外推到未运行云。
 - 主张只基于 held-out seeds/prefix families/arrival traces；calibration/development 数据可解释机制，但不进入最终效果数字。
 - 不在看到 held-out 结果后改阈值、权重、超时或排除失败；任何修复产生新版本，并按预设规则重跑受影响 baseline/candidate。
-- 不引入 PD disaggregation、多节点 KV transfer、新模型、tenant fairness 或 node autoscaling；这些不属于 capstone 收尾。
+- 不引入 PD disaggregation、KV transfer、新模型、tenant fairness 或 node autoscaling；这些不属于 capstone 收尾。
+- 所有正式 cell 固定 `1 replica = 1 Pod / 1 node / G GPUs / TP=G`；route/autoscaler 只改变 endpoint 选择或完整 replica 数，不改变 Pod 内并行度。
 - 故障注入只在独立实验 namespace/cluster、合成数据、显式 blast radius 和自动恢复上限内执行；不破坏 shared CRD/controller。
 - Request mirroring 仅在固定 Gateway implementation 支持且能避免双重副作用/计费时选用；镜像成功不替代 canary 响应验证。
 
@@ -40,12 +41,12 @@
 | 维度 | 冻结内容 |
 |---|---|
 | Build | Git commit、KServe/KEDA/GAIE/llm-d/vLLM releases、image digests、CRD checksums |
-| Environment | GKE/Kubernetes/GatewayClass、GPU/node、driver、quota、region、网络入口 |
+| Environment | GKE/Kubernetes/GatewayClass、`G`、TP、Pod/node placement、GPU/driver、quota、region、网络入口 |
 | SLO | TTFT/TPOT 阈值、成功/错误/超时分类、measurement window、drain rule |
 | Data | held-out seeds、prefix families、short/long mix、burst schedule、warmup 与 exclusion rules |
 | Matrix | baseline/candidate、唯一 replicas writer、路由/扩缩容配置和预设消融 |
 | Statistics | independent run unit、重复数、paired ordering、interval method 与 minimum sample caveat |
-| Cost | allocated GPU-hours、billed GPU/node-hours、LB/disk 与成功达标 token 分母 |
+| Cost | replicas、`replicas × G`、allocated GPU-hours、billed GPU/node-hours、LB/disk 与成功达标 token 分母 |
 
 `SLO attainment = 成功且同时满足该请求适用 TTFT/TPOT 阈值的 offered requests / 全部有效 offered requests`。Latency quantiles 若只对成功请求计算，必须并列 error/timeout；goodput 的 arrival window 与 completion/drain duration 分开。三个重复可显示波动但通常不足以支撑稳定 P99 置信区间，不能靠增加 bootstrap resamples 制造独立信息。
 
@@ -76,7 +77,7 @@ Day 1 还要冻结单 run 最大时长和总 GPU-hour 上限；若预算先耗�
 
 | 故障 | 主要验证 | 不允许的误判 |
 |---|---|---|
-| 一个 vLLM Pod NotReady/terminated | endpoint removal、既有 stream、新请求、cache cold restart | 只看 Deployment available 就称无影响 |
+| 一个完整 `G`-GPU vLLM Pod NotReady/terminated | endpoint removal、全部 TP ranks、既有 stream、新请求、cache cold restart | 只看 Deployment available 就称无影响 |
 | Gateway data plane/controller 有界重启 | 既有 stream 与新请求分别表现、Route status、alert、重连与恢复 | controller 重启等同 data-plane 中断，或新请求恢复就忽略旧 stream |
 | llm-d Router/EPP unavailable/slow | ext_proc failure mode、timeout、fail-open/close、报警和恢复 | HTTP 200 就称路由正确 |
 | Prometheus/metric query missing/stale | HPA/KEDA fallback、避免误缩容、alert | empty metric 当零 demand |
@@ -134,6 +135,7 @@ Runbook 至少包含：
 - [ ] Release/run manifest、SLO、held-out split、矩阵、重复数和停止条件在执行前冻结。
 - [ ] 八个正式 cells / 24 个 runs 均保留错误、超时、原始数据和 run order；未挑选最好结果，预算中断则整组标记 incomplete。
 - [ ] 路由、扩缩容与组合结论分别有对应 baseline，负向 workload 与无收益结果未删除。
+- [ ] 所有 cells 的 `G`、TP 与单节点 placement 固定，autoscaling 的 GPU 需求按 `replicas × G` 对账。
 - [ ] Pod、Gateway data plane/controller、EPP/router、metric 和 rollout 故障有受控注入、signals、恢复与 SLO 验证证据。
 - [ ] Canary/rollback 覆盖 image、config、route 和 unique writer；streaming/drain 无隐藏 retry。
 - [ ] Runbook 经一次 tabletop/clean-environment 演练，命令、权限、context、rollback 和 escalation 可执行。

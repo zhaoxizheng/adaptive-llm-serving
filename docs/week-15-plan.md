@@ -2,13 +2,13 @@
 
 > 时间预算：约 11 小时
 >
-> 本周主线：复用已掌握的 Kubernetes 和 Prometheus，在真实双 GPU 环境建立多副本 baseline，验证路由、请求排空和冷启动的实际行为，为后续 Gateway API/GAIE 对照提供公平证据。
+> 本周主线：复用已掌握的 Kubernetes 和 Prometheus，以 Week 14 冻结的单节点 replica shape 建立多副本 baseline，验证路由、请求排空和冷启动；每个 replica 可以使用一张或同一节点内多张 GPU。
 >
 > 前置：[Week 14 plan](week-14-plan.md) 的固定 serving baseline；阅读：[Week 15 references](week-15-references.md)。下列文件是待完成产出。
 
 ## 本周目标
 
-1. 在同型号 GPU 上运行两个独立 vLLM replicas，每个副本独占一张 GPU。
+1. 运行两个独立 vLLM replicas；每个 replica 是 `1 Pod / 1 node / G GPUs / TP=G`，并暴露一个 API endpoint。
 2. 验证真正的 request-level round-robin，而不是把 Service 的连接分发当成 RR。
 3. 在 uniform、mixed、shared-prefix、burst 四类流量下建立逐副本证据。
 4. 测量 Pod cold start、Ready、route admission 和 first successful token 的时间差。
@@ -19,12 +19,13 @@
 - 不重新学习 Deployment、Service、Probe、Prometheus 或 HPA 基础。
 - 不安装 Gateway API/GAIE 或其他推理网关扩展，不实现 cache-aware/SLO-aware router。
 - 不将两个进程挤在同一张 GPU 上冒充双副本性能实验。
+- 不允许一个 replica 跨 Pod 或跨 node；路由器选择完整 replica endpoint，不选择某张 GPU 或 TP rank。
 - 测试只在独立实验集群/namespace；不复用工作环境的配置、凭证或真实流量。
 - CPU-only 集群可做 manifest/control-plane smoke，但不能替代 GPU 性能与容量验收。
 
 ## 本周最终产出
 
-- `deploy/vllm/`：固定 image digest、模型 revision、GPU resources、probes 和 shutdown 配置。
+- `deploy/vllm/`：固定 image digest、模型 revision、`nvidia.com/gpu: G`、TP args、单节点放置、probes 和 shutdown 配置。
 - `deploy/gateway/`：最小 request-level RR gateway 配置与 upstream 身份记录。
 - `deploy/autoscaling/`：已存在 HPA 模板的本实验配置，不引入新 autoscaler。
 - `configs/week15-multireplica.yaml`：workload、SLO、cache 状态和副本矩阵。
@@ -34,8 +35,8 @@
 
 ## 资源与安全前置
 
-- 使用 GKE 或已有独立 GPU Kubernetes，至少有两个可同时分配的同型号 GPU slots；GPU 不足则本周性能部分 blocked。
-- 固定 GPU 型号、驱动、vLLM image、模型、dtype、engine args、CPU/memory requests 与 limits。
+- 使用 GKE 或已有独立 GPU Kubernetes。若每个 replica 需要 `G` 张 GPU，双副本矩阵需 `2 × G` 张可分配 GPU，且每个 Pod 的 `G` 张 GPU 必须可在一台 node 上共同分配；容量不足则对应 cell blocked。
+- 固定 GPU 型号、驱动、vLLM image、模型、dtype、`gpus_per_replica=G`、`tensor_parallel_size=G`、CPU/memory requests 与 limits。
 - 性能实验优先按需节点，避免 Spot 抢占与调度策略混杂；如用 Spot，抢占 run 单独标记。
 - 默认 private/internal endpoint。外部访问必须有 TLS、鉴权和源地址限制，不暴露未鉴权模型或管理接口。
 - 先检查 quota、node pool 上限、模型下载与磁盘预算；不自动创建无上限 GPU 资源。
@@ -45,17 +46,31 @@
 
 ```text
 Load generator → request-level RR gateway
-                    ├── vLLM replica A → GPU 0
-                    └── vLLM replica B → GPU 1
+                    ├── replica A: 1 Pod / 1 node / G GPUs / TP=G
+                    └── replica B: 1 Pod / 1 node / G GPUs / TP=G
 ```
 
 - RR 的选择单位是一次 HTTP inference request；一次 SSE stream 从头到尾固定在同一 upstream。
+- Gateway/EPP 看到的是每个 replica 的一个 endpoint，不感知 Pod 内 GPU 或 TP rank。
 - 普通 Kubernetes Service 不保证逐请求 RR；HTTP keep-alive/HTTP2 连接复用可能让流量长期落在同一后端。
 - 用 request ID 关联 gateway upstream、Pod UID 与客户端结果，实际证明分发序列，不凭配置名称判断。
 - 两个健康副本的每轮 RR admission count 差值应不超过 1；多 gateway worker 时按各自序列验证，再报告总分布。
 - Readiness 通过不等于首条模型请求已可用，增加受控 warmup 和真实 generation smoke。
 - 不在已输出 token 后自动重试；取消要传递给 upstream，重试次数、断流和重复生成均可观测。
 - 记录 routing、connect、queue、TTFT、TPOT 的测量边界。客户端重试不隐藏原始失败。
+
+## Replica Shape Handoff
+
+Week 14 先冻结每副本资源形态，再进入路由实验：
+
+```text
+replica shape = 1 Pod / 1 node / G GPUs / tensor_parallel_size=G
+total allocated GPUs = replica count × G
+```
+
+- 若模型同时支持 TP=1 和 TP=2，先在相同两卡总预算下比较 `1 replica × TP=2` 与 `2 replicas × TP=1`，明确前者优化单副本容量/延迟，后者优化并发与故障隔离。
+- 选定下游 shape 后，Week 15–22 不再动态改变 `G` 或 TP；任何 shape 变化都是新 deployment/version，不是 autoscaling。
+- 对 TP>1 Pod，保存 `nvidia.com/gpu: G`、Pod nodeName、visible devices、vLLM parsed TP 和 local rank → GPU mapping。
 
 ## 最小实验矩阵
 
@@ -66,8 +81,10 @@ Load generator → request-level RR gateway
 | Shared prefixes | 必做 | 不做 | 每副本 cache hit/query 增量、cache locality 与 TTFT |
 | Burst | 必做 | 必做 | desired/current/Ready replicas、冷启动与 SLO attainment |
 
-- 双副本 RR 使用完全相同的输入 trace 和每实例配置，与单副本对比时明确 GPU 预算翻倍。
-- HPA 使用已有 CPU-based 模板，设置合理 CPU requests、目标值、stabilization、min=1/max=2；预先保留两张 GPU 容量，先隔离 Pod scaling 而不是 node provisioning。
+- 双副本 RR 使用完全相同的输入 trace 和每实例配置，与单副本对比时明确总 GPU 预算从 `G` 增至 `2 × G`。
+- `1 × TP=2` 与 `2 × TP=1` 的同预算对照只在同一模型可用两种形态时执行；它决定下游 replica shape，但不混入 RR 策略收益。
+- HPA 使用已有 CPU-based 模板，设置合理 CPU requests、目标值、stabilization、min=1/max=2；预先保留两个完整 replica shapes 的容量，先隔离 Pod scaling 而不是 node provisioning。
+- HPA 只改变 Deployment replica count，不能修改现有 Pod 的 `G`、TP degree 或模型参数；扩容 1→2 表示新增一个完整的 `G`-GPU Pod。
 - Burst 额外保留固定单副本/双副本两端基线。HPA 不是同资源预算对比，必须报告时间变化的 GPU allocation 和 GPU-hours。
 - 若 CPU 未触发 HPA，报告“该指标/目标在此 workload 未触发”，不预设 HPA 必然失败；HPA 也支持 custom metrics，不把 CPU 指标局限等同整个机制局限。
 - 每个正式 cell 至少三个重复，保存请求数、cache 初始状态、失败/超时和逐请求 latency。
@@ -97,7 +114,7 @@ Load generator → request-level RR gateway
 
 1. 如何证明这是 request-level RR，而不是连接级均衡？
 2. 请求数均衡时，token load、queue 和 cache locality 是否仍不均衡？
-3. 多副本增益是多少，代价是多少 GPU-hours，何时不再线性扩展？
+3. 多副本增益是多少，代价是多少 GPU-hours，`G` 与 replica count 如何共同决定总 GPU 预算？
 4. Burst 中观测到压力、desired replicas 增加、Pod Ready 和首个 token 之间各有多久？
 5. CPU 指标对本 workload 有多强解释力，缺失了什么推理压力信息？
 6. 正常下线是否排空了已有请求，强制失败丢失了哪些请求？
@@ -105,7 +122,7 @@ Load generator → request-level RR gateway
 
 ## 完成标准
 
-- [ ] 双副本真实运行在两个独占 GPU slots，版本和资源配置一致。
+- [ ] 两个 replica 均满足 `1 Pod / 1 node / G GPUs / TP=G`，版本、资源和 rank 配置一致，并保存 Pod/node/GPU 证据。
 - [ ] RR 分发、SSE 不缓冲、取消和失败语义有请求级证据。
 - [ ] 四类 workload 有原始数据，失败、样本量和成本未遗漏。
 - [ ] HPA burst 有 desired/current/Ready 时间线，和固定单/双副本基线可对照。

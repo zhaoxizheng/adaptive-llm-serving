@@ -1,18 +1,30 @@
-# Cloud-Native LLM Serving: 24-Week Learning Roadmap
+# Cloud-Native LLM Serving: 22-Week Learning Roadmap
 
 A hands-on project that starts with measured single-GPU autoregressive inference,
-progresses through vLLM internals and multi-replica serving, and then builds a
-cloud-provider-neutral serving path around Kubernetes Gateway API, Gateway API
-Inference Extension (GAIE), llm-d, and vLLM. The final block runs vLLM across
-multiple nodes with native multiprocessing, then packages that runtime with
-LeaderWorkerSet and Kueue for scheduling, failure, and operations evidence.
+progresses through vLLM internals and same-host multi-GPU tensor parallelism, and
+then builds a cloud-provider-neutral serving path around Kubernetes Gateway API,
+Gateway API Inference Extension (GAIE), llm-d, and vLLM.
 
 The portable data-plane baseline is `Gateway`/`HTTPRoute` + `InferencePool` + an
-llm-d Endpoint Picker (EPP) + vLLM. HPA or KEDA supplies the primary autoscaling
-path; KServe is evaluated as an optional declarative control plane. Weeks 23–24
-extend the same vLLM runtime into a Kubernetes-native multi-node operations path.
+llm-d Endpoint Picker (EPP) + vLLM. Each logical vLLM replica is one Pod on one
+node and may use one or more same-node GPUs with tensor parallelism. HPA or KEDA
+scales complete replicas without changing their GPU count or tensor-parallel size;
+KServe is evaluated separately as an optional declarative control plane.
 
-Start with the [24-week learning roadmap](docs/learning-roadmap.md), then use the
+This is the roadmap's only production model-execution topology. Independent replicas
+may be scheduled on different nodes, while every replica keeps all GPU and TP ranks
+co-located on one node.
+
+```text
+Client -> Gateway API / HTTPRoute -> GAIE InferencePool -> llm-d EPP
+                                                     |- replica A: 1 Pod / 1 node / G GPUs / TP=G
+                                                     `- replica B: 1 Pod / 1 node / G GPUs / TP=G
+
+Direct HPA or KEDA-managed HPA -> Deployment replica count only
+Total allocated GPUs = replica count x G
+```
+
+Start with the [22-week learning roadmap](docs/learning-roadmap.md), then use the
 weekly execution plans and reading lists:
 
 - [Week 1 execution plan](docs/week-01-plan.md) and [references](docs/week-01-references.md)
@@ -37,10 +49,8 @@ weekly execution plans and reading lists:
 - [Week 20 execution plan](docs/week-20-plan.md) and [references](docs/week-20-references.md)
 - [Week 21 execution plan](docs/week-21-plan.md) and [references](docs/week-21-references.md)
 - [Week 22 execution plan](docs/week-22-plan.md) and [references](docs/week-22-references.md)
-- [Week 23 execution plan](docs/week-23-plan.md) and [references](docs/week-23-references.md)
-- [Week 24 execution plan](docs/week-24-plan.md) and [references](docs/week-24-references.md)
 
-### Weeks 16–24 Overview
+### Weeks 16–22 Overview
 
 Week numbers are prerequisite-based milestones, not calendar dates. The roadmap
 does not imply that earlier weeks are complete. Start each milestone only when its
@@ -53,11 +63,9 @@ with incomparable CPU results. Each week budgets about 11 hours.
 | 17 | GAIE `InferencePool` v1 and Reference EPP | Standard endpoint-selection data path, conformance boundary, and EPP failure semantics |
 | 18 | llm-d Router/EPP: Load-aware and Precise Prefix-aware Routing | Fixed-replica routing comparison with locality/load/staleness evidence |
 | 19 | KServe `LLMInferenceService` control plane | Alpha reconciliation and generated-resource audit |
-| 20 | HPA/KEDA autoscaling and observability | Metric contract, cold-start/failure timelines, and allocated/billed GPU-hours; WVA optional |
+| 20 | HPA/KEDA autoscaling and observability | Metric contract, cold-start/failure timelines, and allocated/billed GPU-hours |
 | 21 | Cloud implementation mapping and portability | GKE live run plus evidence-backed mappings for other providers |
 | 22 | Capstone: held-out, failure, rollout, and runbook | Repeated A/B results, fault matrix, compatibility table, and rollback runbook |
-| 23 | vLLM native multiprocessing multi-node | TP/PP/DP/EP runtime, rank, launch, and communication contract |
-| 24 | LeaderWorkerSet + Kueue operations handoff | Gang admission, topology placement, failure recovery, and final multi-node runbook |
 
 ### API, Cloud, and Evidence Boundaries
 
@@ -74,18 +82,13 @@ with incomparable CPU results. Each week budgets about 11 hours.
 
 ### Hardware and Blocked Experiments
 
-- Weeks 1–14 use the single NVIDIA L4 baseline. Week 15 and performance cells in
-  Weeks 16–22 require two independently schedulable, same-model GPU slots. A CPU
-  cluster may validate CRDs and reconciliation only.
-- Weeks 23–24 require at least two same-zone GPU nodes for the mandatory
-  multi-node lifecycle experiments. L4 over ordinary cloud TCP is useful for
-  correctness and orchestration evidence, not production collective-performance
-  claims.
-- Meaningful cross-node TP/EP performance conclusions require suitable model
-  scale, matched accelerators, known topology, and high-bandwidth GPU networking.
-  When those resources are unavailable, mark the affected cell `blocked` or
-  `deferred`; retain the failure record and continue with independent analysis.
-- Prefer stable on-demand capacity for controlled multi-node comparisons. If Spot
+- Weeks 1–13 use the single NVIDIA L4 baseline. Week 14 includes one same-host
+  dual-GPU TP cell; if that hardware is unavailable, mark it `deferred`.
+- Week 15 and performance cells in Weeks 16–22 require two complete replica slots.
+  If one replica uses `G` same-node GPUs with `TP=G`, the two-replica experiments
+  require `2 × G` GPUs, with each group of `G` co-located on one node. A CPU cluster
+  may validate CRDs and reconciliation only.
+- Prefer stable on-demand capacity for controlled multi-replica comparisons. If Spot
   is used, record preemption separately and never merge it into the steady-state
   result. Stop GPU nodes and audit disks, load balancers, and addresses after each
   experiment window.
@@ -226,13 +229,16 @@ Do not compare runs across different GPU models as if they were controlled resul
 Resume one CSV only when the runner accepts the same source, machine ID/GCE instance
 ID, dependency freeze, GPU, CUDA, driver, and model snapshot identities.
 
-## Repository Layout
+## Target Repository Layout
+
+The later-week directories below are planned deliverables and are not claims that the
+corresponding manifests, experiments, or reports already exist.
 
 ```text
 benchmark/           Workload definitions, runners, and analysis
 configs/             Versioned experiment configurations
 dashboards/          Cross-layer observability views
-deploy/              vLLM, Gateway/GAIE, llm-d, autoscaling, LWS, and Kueue manifests
+deploy/              vLLM, Gateway/GAIE, llm-d, autoscaling, and provider manifests
 docs/                Weekly plans/references, architecture, portability, and ADRs
 reports/             Written experiment conclusions and runbooks
 results/             Raw records, timelines, and environment manifests by week

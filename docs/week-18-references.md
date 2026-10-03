@@ -27,6 +27,7 @@
 
 5. [Preble: Efficient Distributed Prompt Scheduling for LLM Serving](https://arxiv.org/abs/2407.00023)
    - 阅读问题定义、locality/load-balancing 取舍和评估条件，重点理解“只追求 cache hit”为何可能形成热点。
+   - 本路线只借鉴完整 replica endpoints 之间的调度思想；标题中的 distributed 不改变“一个 replica 的全部 TP ranks 位于同一节点”这一约束。
    - 固定论文版本；只用来设计反例，不复刻系统，也不将论文数字当作本地收益。
 
 6. [vLLM Prefix Caching Design](https://docs.vllm.ai/en/latest/design/prefix_caching/)

@@ -1,6 +1,6 @@
 # Learning Roadmap: 从 vLLM 到 Cloud-Native LLM Serving
 
-> 目标：用 24 周、通常每周约 10–12 小时，从理解单机 LLM 推理逐步过渡到云厂商通用的 Kubernetes 推理服务架构，并完成一个以 vLLM、Gateway API、Gateway API Inference Extension（GAIE）和 llm-d 为可移植主线的可复现项目。Prometheus 与 Kubernetes 作为已掌握的基础设施直接使用，不再安排基础学习。
+> 目标：用 22 周、通常每周约 10–12 小时，从理解单机 LLM 推理逐步过渡到云厂商通用的 Kubernetes 推理服务架构，并完成一个以 vLLM、Gateway API、Gateway API Inference Extension（GAIE）和 llm-d 为可移植主线的可复现项目。Prometheus 与 Kubernetes 作为已掌握的基础设施直接使用，不再安排基础学习。
 
 ## 路线总览
 
@@ -17,14 +17,14 @@
     ↓
 加入 InferencePool 与 llm-d EPP
     ↓
-验证扩缩容、云可移植性与故障语义
-    ↓
-完成 vLLM 原生多进程多节点运行与 LWS + Kueue 运维交接
+验证扩缩容、云可移植性、故障语义与发布回滚
 ```
 
 最终项目：
 
-> 构建一个基于 vLLM + Kubernetes Gateway API + GAIE `InferencePool` + llm-d EPP 的自适应 LLM Serving 平台，在突发流量、长短请求混合和共享前缀三类负载下，对路由、扩缩容、故障恢复与云实现边界进行可复现实验。HPA/KEDA 是主扩缩容路径；KServe `LLMInferenceService` 作为可选声明式控制面对照，不是可移植数据面的前提。
+> 构建一个基于 vLLM + Kubernetes Gateway API + GAIE `InferencePool` + llm-d EPP 的自适应 LLM Serving 平台，在突发流量、长短请求混合和共享前缀三类负载下，对路由、扩缩容、故障恢复与云实现边界进行可复现实验。每个 vLLM replica 必须完整运行在一台服务器内，可使用一张或多张同节点 GPU；HPA/KEDA 是主扩缩容路径，KServe `LLMInferenceService` 作为可选声明式控制面对照，不是可移植数据面的前提。
+
+这是路线唯一的生产模型执行形态：集群可以把多个独立 replicas 放在不同节点，但绝不把同一个 replica 的 GPU 或 TP ranks 拆到多个节点。
 
 默认前提：有普通后端开发经验，了解 Python 和 Linux。开发设备是 36 GB 内存的 Mac M3 Pro，日常内存占用可能达到约 30 GB，因此从第一阶段开始就使用按小时计费的云端 NVIDIA GPU；本地 Mac 只负责写代码、Git、查看实验结果、分析数据和撰写文档，不在本地加载模型或运行正式 benchmark。
 
@@ -35,7 +35,7 @@
 - vLLM 的主要学习和性能路径围绕 Linux、NVIDIA CUDA 展开，Apple Silicon/MPS 不适合作为这条路线的基准环境。
 - 本地统一内存已经长期处于高占用状态，继续加载模型容易引发 swap、系统卡顿和不可重复的性能结果。
 - 从第一天就在 CUDA 环境运行，可以避免前期代码在 MPS/CPU 上可用、迁移到 vLLM 和 CUDA 时又重新适配。
-- 后续的 Triton、Nsight、多副本路由和多节点并行实验本来就需要 NVIDIA GPU 或 Linux 集群。
+- 后续的 Triton、Nsight、同机多卡 TP 和多副本路由实验本来就需要 NVIDIA GPU 或 Linux 集群。
 
 ### 环境分工
 
@@ -43,15 +43,14 @@
 |---|---|---|
 | Mac M3 Pro | 编辑代码、Git、SSH、阅读源码、画图、分析下载后的指标、写报告 | 加载模型、运行 vLLM、正式性能测试 |
 | 单卡云 GPU | Mini Inference Lab、vLLM 单实例、profiling、参数调优 | 多副本和多卡结论 |
-| 多卡云主机或 GPU Kubernetes | tensor parallel、多副本路由、Gateway/GAIE、扩缩容、多节点与故障实验 | 日常编码和长期空闲开发 |
+| 多卡云主机或 GPU Kubernetes | 同机 tensor parallel、多副本路由、Gateway/GAIE、扩缩容与故障实验 | 日常编码和长期空闲开发 |
 
 ### 分阶段 GPU 建议
 
 - 第 1–4 阶段：默认使用 GCP Compute Engine `g2-standard-4` Spot（1×NVIDIA L4 24 GB、4 vCPU、16 GiB 内存），优先从 `us-central1-a` 尝试。它足够运行小模型、vLLM 和大多数单卡实验。若该区没有 Spot 容量，可换同区域的 G2 可用区，或等待后重试。
 - tensor parallel 实验：短租一台至少双卡且卡间通信拓扑明确的机器。所有对比应固定 GPU 型号和数量。
-- Kubernetes serving 阶段：迁移到 GKE，使用至少两个可调度 GPU 实例或一台多 GPU 节点，确保能真实比较多副本路由。纯 CPU 集群只用于验证 CRD、控制器和 reconciliation，不用于性能结论。
-- 多节点阶段：至少准备两个同区、同 GPU 型号的节点。普通 L4/TCP 环境可验证 TP/PP/DP correctness、operator lifecycle 与 failure semantics，但不能代表高带宽生产集群的 collective 性能。
-- 跨节点 TP/EP 性能实验只有在模型、GPU 数量、节点内/节点间互联和拓扑证据满足前提时才执行；条件不足时标记 `blocked` 或 `deferred`，不使用 CPU 或不同 GPU 拼成结论。
+- Kubernetes serving 阶段：迁移到 GKE。一个 replica 固定为 `1 Pod / 1 node / G GPUs / TP=G`；双副本实验需要 `2 × G` 张 GPU，且每组 `G` 张 GPU 必须能在同一节点分配。纯 CPU 集群只用于验证 CRD、控制器和 reconciliation，不用于性能结论。
+- 路由和 autoscaling 只改变完整 replica 的选择与数量，不改变运行中 replica 的 `G` 或 TP degree。
 - 不必一开始租 H100。先用 24 GB GPU 跑通完整方法；只有模型规模或特定 FP8/Hopper 实验确实需要时，再短时使用高端 GPU。
 
 ### 当前 GCP 基线
@@ -119,7 +118,7 @@ estimated_cost: <amount-and-currency>
 3. 先用小 workload 验证，再扩大实验规模。
 4. 所有实验脚本支持失败退出，并尽可能设置最大运行时间。
 5. 用 Git commit 和运行清单绑定结果，避免因为不可复现而重新租卡。
-6. GCP Spot 适合单卡 benchmark，但脚本必须按 case 原子落盘并可断点续跑；需要稳定多节点通信的实验使用按需实例。
+6. GCP Spot 适合单卡 benchmark，但脚本必须按 case 原子落盘并可断点续跑；同机多卡 TP 和受控多副本对比优先使用稳定按需容量。
 
 ## 第一阶段：建立推理性能直觉（第 1–3 周）
 
@@ -131,7 +130,7 @@ estimated_cost: <amount-and-currency>
 - [ ] 理解 batch size、sequence length 对显存和延迟的影响
 - [ ] 理解 compute-bound 和 memory-bound
 - [ ] 掌握 TTFT、TPOT、ITL、E2E latency、throughput 和 goodput
-- [ ] 区分 tensor parallel、pipeline parallel 和 data parallel
+- [ ] 区分同机 tensor parallel 与独立 replica 横向扩容
 
 ### 动手项目：Mini Inference Lab
 
@@ -271,7 +270,7 @@ Attention / CUDA Graph / Model
 - Week 11：用 PyTorch Profiler 分解 framework/operator 瓶颈
 - Week 12：用 Nsight Systems 重建 CPU–GPU timeline
 - Week 13：用 Nsight Compute 深挖关键 kernel，并完成 prefix caching 专项
-- Week 14：完成 chunked prefill、CUDA Graph 与 parallelism 的受控优化实验
+- Week 14：完成 chunked prefill、CUDA Graph 与单机多卡 TP 的受控优化实验
 
 ### 工具
 
@@ -305,8 +304,10 @@ Attention / CUDA Graph / Model
 
 ### 实验五：Parallelism
 
-- [ ] 有多卡时至少完成一次 tensor parallel 实验
-- [ ] 记录计算收益和通信开销
+- [ ] 在一台多卡服务器上完成 `1 replica = 1 Pod = G GPUs = TP G` 实验
+- [ ] 保存 `nvidia.com/gpu` allocation、visible GPUs、local rank mapping 与节点内 topology
+- [ ] Week 14 完成 `1 × TP=1` 与同机 `1 × TP=2` 的容量/通信 smoke，并冻结 replica shape
+- [ ] Week 15 再以相同两卡总预算对比 `1 × TP=2` 与 `2 × TP=1 replicas`，记录 latency、throughput、故障隔离和 GPU-seconds/request
 
 ### 阶段产出
 
@@ -321,11 +322,11 @@ Attention / CUDA Graph / Model
 
 Kubernetes 基础已经掌握，本阶段不再学习 Pod、Deployment、Service、Probe、HPA 或 Prometheus 接入。直接用一周搭建最小多副本基线，为后续 Gateway API/GAIE 对照实验准备证据。
 
-执行计划：[Week 15](week-15-plan.md) / [资料](week-15-references.md)。使用两个真实 GPU slots；区分 request-level round-robin 与 Service 的连接分发，并将 HPA 的副本变化和 GPU 成本一起报告。
+执行计划：[Week 15](week-15-plan.md) / [资料](week-15-references.md)。使用两个完整 replica slots；若每个 replica 使用 `G` 张同节点 GPU，则共需 `2 × G` 张 GPU。区分 request-level round-robin 与 Service 的连接分发，并将 HPA 的副本变化和 GPU 成本一起报告。
 
 ### 部署任务
 
-- [ ] 复用已有容器与 Kubernetes 模板部署 vLLM server
+- [ ] 创建容器与 Kubernetes 模板；实现后复用它们部署 vLLM server
 - [ ] 部署两个或更多 vLLM replicas
 - [ ] 配置并验证 readiness、graceful shutdown 和请求排空
 - [ ] 将各 replica 的推理指标接入已有观测栈
@@ -375,7 +376,7 @@ vLLM replica
 - Gateway/HTTPRoute 负责 L7 listener、matching、policy attachment 和流量转发。
 - `InferencePool` 描述同一模型服务的一组可选 endpoints；`v1` 稳定性只适用于对应 GAIE API，不等于所有推理扩展或云实现均已 GA。
 - EPP 根据 endpoint 状态和推理信号做选择；llm-d EPP 是可替换的路由智能层，不是另一个 vLLM scheduler。
-- vLLM 仍负责单实例内 batching、KV cache、scheduler、worker 和模型执行。
+- vLLM 仍负责单个逻辑 replica 内的 batching、KV cache、scheduler、worker 和模型执行；该 replica 可在同节点使用多卡 TP。
 - Reference EPP 用于学习与 conformance 对照；生产型实验切换到 llm-d，且必须保留可回切配置。
 
 ### 阶段验收
@@ -393,11 +394,11 @@ vLLM replica
 ### 每周主线
 
 - Week 19：KServe `LLMInferenceService` 声明式控制面与资源审计；固定 release，保存 alpha CRD schema、controller 生成对象、reconciliation、升级和回退证据（[计划](week-19-plan.md) / [资料](week-19-references.md)）。
-- Week 20：HPA/KEDA 扩缩容与可观测性；固定 router，校准 metric contract，分解 cold-start timeline，比较 allocated 与 billed GPU-hours，WVA 仅作条件允许的选修对照（[计划](week-20-plan.md) / [资料](week-20-references.md)）。
+- Week 20：HPA/KEDA 扩缩容与可观测性；固定 router，校准 metric contract，分解 cold-start timeline，并比较 allocated 与 billed GPU-hours（[计划](week-20-plan.md) / [资料](week-20-references.md)）。
 - Week 21：云实现映射与可移植性验证；在 GKE 实跑一条 managed path，对 Azure、ACK、AWS 只做有官方来源的 API/capability mapping（[计划](week-21-plan.md) / [资料](week-21-references.md)）。
 - Week 22：Capstone 的 held-out、故障、发布与 runbook；冻结 router/autoscaler，完成独立重复、最小消融、fault matrix、rollback 和最终演示（[计划](week-22-plan.md) / [资料](week-22-references.md)）。
 
-KServe 是可选控制面，不取代 Week 16–18 的 portable data-plane contract。`LLMInferenceService` 当前仍是 alpha API；任何 `apiVersion`、生成资源和 upgrade 行为都以 Week 19 固定 release 的已安装 CRD 为准。每个 workload 只能有一个 replicas writer，不能让 HPA、KEDA、WVA 或其他 controller 同时修改副本数。
+KServe 是可选控制面，不取代 Week 16–18 的 portable data-plane contract。`LLMInferenceService` 当前仍是 alpha API；任何 `apiVersion`、生成资源和 upgrade 行为都以 Week 19 固定 release 的已安装 CRD 为准。Week 20 的通用 autoscaling 实验使用 vLLM `Deployment` 作为共同 `/scale` target，并且只能选择独立 HPA 或 KEDA `ScaledObject` 其中一条扩缩容路径，不能让两个 controller 或 GitOps/manual loop 同时修改副本数。
 
 ### Capstone 名称
 
@@ -417,13 +418,15 @@ llm-d EPP
 └── prefix-aware selection
         ↓
 vLLM Replica Pool
-├── Replica A
-├── Replica B
-└── Dynamically scaled replicas
+├── Replica A：1 Pod / 1 node / G GPUs / TP=G
+├── Replica B：1 Pod / 1 node / G GPUs / TP=G
+└── Dynamically scaled complete replicas（TP 固定）
         ↓
 Prometheus / Logs / Traces → Dashboard → Experiment Report
 
-HPA or KEDA ── metrics contract ──→ replica count
+Prometheus Adapter → independent HPA ─┐
+                                      ├──→ vLLM Deployment /scale
+Prometheus → KEDA → generated HPA ────┘
 
 Optional control plane: KServe LLMInferenceService
 ```
@@ -458,44 +461,6 @@ Optional control plane: KServe LLMInferenceService
 
 本阶段的外部资料只在 weekly references 首次编号：见 [Week 19 references](week-19-references.md)、[Week 20 references](week-20-references.md)、[Week 21 references](week-21-references.md) 和 [Week 22 references](week-22-references.md)。
 
-## 第八阶段：多节点 vLLM 与 Kubernetes 运维交接（第 23–24 周）
-
-### 每周主线
-
-- Week 23：vLLM native multiprocessing 多节点并行与 Runtime Contract；冻结 TP/PP/DP/EP、进程启动、rank mapping、通信和 shutdown 边界，2 nodes × 1 L4 只做功能 smoke，高速网络/多卡满足门槛后才做性能结论（[计划](week-23-plan.md) / [资料](week-23-references.md)）。
-- Week 24：LeaderWorkerSet + Kueue 的 gang admission、拓扑调度、故障恢复与最终 multi-node operations handoff；验证 LWS group lifecycle/failure semantics、Kueue all-or-nothing admission 和 topology-aware scheduling，并交付可重复的部署、恢复、升级、观测和成本 runbook（[计划](week-24-plan.md) / [资料](week-24-references.md)）。
-
-### 分层模型
-
-```text
-vLLM native multiprocessing
-└── 单模型副本内的 TP / PP / DP / EP、进程启动、rank mapping 与通信
-
-Kubernetes workload path
-├── LeaderWorkerSet：leader + workers 组成复制单元并定义 group lifecycle
-└── Kueue：all-or-nothing admission、gang 与 topology-aware scheduling
-```
-
-LWS 不替代 vLLM 的 distributed runtime；它负责把 leader 与 workers 建模为一个 Kubernetes workload group。Kueue 在这一层提供 admission 与 topology placement。Week 23 冻结进程级 runtime contract，Week 24 只改变 Kubernetes workload 与调度层，并把验证结果收敛为最终 multi-node operations handoff。
-
-### 硬件与结论门槛
-
-- 最低功能验证：两个同区节点、每节点 1×L4，可做 PP/跨节点 TP smoke、DP、operator lifecycle、gang 和 failure；不能宣称生产级 collective 性能。
-- 更完整教学矩阵：每节点至少两张同型号 GPU，可比较单节点 TP、跨节点 PP/TP 和 DP，但普通 L4/TCP 仍以 runtime/orchestration 结论为主。
-- 有意义的 TP/EP 性能实验需要匹配的多 GPU 节点、已知的 NVLink/NVSwitch/网络拓扑、高带宽节点间互联和通过的 collective benchmark；EP 还必须使用受支持的 MoE 模型。
-- 硬件不足时保留 manifest、smoke、调度与错误证据，将性能 cell 标记 `blocked`/`deferred`，不外推到未测试硬件。
-
-### 阶段验收
-
-- [ ] 能区分模型因单卡放不下而分片、为吞吐复制 engine，以及 Kubernetes 如何把这些进程组织成工作负载。
-- [ ] vLLM native multiprocessing 有可复现的 launch、rank mapping、通信、health check 与 shutdown 证据。
-- [ ] LWS + Kueue 有 group identity、all-or-nothing admission、topology 和 group recovery 证据。
-- [ ] Week 24 在固定硬件、镜像和 workload 下完成 scheduling、failure、upgrade、observability 与成本验证，而非只比较吞吐。
-- [ ] 最终 handoff 包含部署、排障、节点故障恢复、受控升级、回滚和停止计费资源的可执行 runbook。
-- [ ] 职责边界可审计：vLLM native multiprocessing 管理模型进程与通信，LWS 管理 workload group lifecycle，Kueue 管理 admission 与 topology placement。
-
-本阶段资料入口见 [Week 23 references](week-23-references.md) 和 [Week 24 references](week-24-references.md)。
-
 ## 推荐仓库结构
 
 ```text
@@ -508,7 +473,6 @@ adaptive-llm-serving/
 │   ├── vllm-request-lifecycle.md
 │   ├── experiment-methodology.md
 │   ├── cloud-portability.md
-│   ├── multi-node-operations.md
 │   └── results.md
 ├── deploy/
 │   ├── vllm/
@@ -517,8 +481,6 @@ adaptive-llm-serving/
 │   ├── llm-d/
 │   ├── kserve/
 │   ├── autoscaling/
-│   ├── lws/
-│   ├── kueue/
 │   ├── providers/
 │   └── monitoring/
 ├── benchmark/
@@ -553,21 +515,17 @@ make report
 - [ ] 关联 Gateway、EPP、vLLM 与 autoscaler 的 dashboard
 - [ ] Service/RR、reference EPP、llm-d routing 与选定 autoscaler 的最小消融
 - [ ] GKE 实跑证据与 Azure/ACK/AWS capability mapping
-- [ ] vLLM native multiprocessing 多节点证据与 LWS + Kueue operations handoff
+- [ ] 单机多卡 vLLM replica 的 TP、资源放置、rank mapping 与成本证据
 - [ ] profiling 截图或 timeline
 - [ ] 失败、blocked/deferred 实验和设计取舍记录
 - [ ] deployment、rollback 与故障恢复 runbook
 - [ ] 3–5 分钟演示视频
 - [ ] 一篇技术文章
-- [ ] 最好完成一个 vLLM、Gateway API/GAIE、llm-d、KServe、LWS 或 Kueue 上游贡献
+- [ ] 最好完成一个 vLLM、Gateway API/GAIE、llm-d 或 KServe 上游贡献
 
 ## 简历描述模板
 
 > Built a portable cloud-native LLM serving platform with vLLM, Kubernetes Gateway API, GAIE InferencePool, and llm-d EPP. Evaluated load- and prefix-aware routing plus HPA/KEDA autoscaling under bursty, long-context, and prefix-heavy workloads using P99 TTFT, goodput, routing latency, KV-cache hit rate, and allocated/billed GPU-hours; validated the managed path on GKE and documented provider mappings.
-
-多节点实验完成后可增加：
-
-> Ran multi-node vLLM with native multiprocessing, then operationalized it with LeaderWorkerSet and Kueue, documenting gang admission, topology placement, failure recovery, controlled upgrades, rollback, observability, and cost in a reproducible operations handoff.
 
 实验完成后，补上实际提升数字和实验条件。
 
@@ -578,16 +536,16 @@ make report
 3. 先验证标准 `Gateway`/`HTTPRoute`/`InferencePool` contract，再比较实现；不把实现私有 API 当作云通用基线。
 4. 每个性能结论必须记录硬件、模型、软件版本、参数和 workload。
 5. 先建立正确且可复现的 baseline，再进行优化。
-6. 每个实验只改变一个主要控制面变量；routing、autoscaling 和多节点 workload lifecycle 分阶段验证。
+6. 每个实验只改变一个主要变量；单机 TP、routing 和 autoscaling 分阶段验证。
 7. API version、conformance、provider preview/GA 和实际运行证据分别记录，不推断市场份额或普遍采用率。
 8. GPU 或网络条件不满足时标记 blocked/deferred，不用 CPU smoke 或普通 L4/TCP 外推性能。
 9. 优先提交小而清晰的上游贡献，证明能够阅读并改动真实推理系统。
 
 ## 时间调整
 
-- 每周约 5 小时：将 24 周路线延长到约 11–12 个月；保持前置关系，不把两个 GPU-heavy milestone 硬塞进同一周。
+- 每周约 5 小时：将 22 周路线延长到约 10–11 个月；保持前置关系，不把两个 GPU-heavy milestone 硬塞进同一周。
 - 当前精简版已假设熟悉 Prometheus 与 Kubernetes：第五阶段从 3 周压缩到 1 周，Week 5 只保留 vLLM metric contract 与实验对齐。
 - GPU quota 暂缺：继续做源码阅读、manifest、schema/object graph、离线分析和 provider mapping；任何性能 cell 保持 blocked，拿到相同 GPU 条件后再补跑。
-- 高速多节点资源暂缺：Week 23–24 先完成 correctness、调度、failure 和 operations handoff，TP/EP collective 性能延后，不阻塞前 22 周 capstone 收尾。
+- 同机双卡资源暂缺：保留 Week 14 的 deployment/TP 实验设计并标记 deferred；不以不同 GPU 或不可比资源拼接结果替代。
 - 目标偏 CUDA/Kernel：增加 Triton、CUDA 和算子 profiling，减少 provider mapping 深度，但保留标准网关 contract。
-- 目标偏 AI Infra/Serving：保持当前比重，重点打磨 EPP、扩缩容、可观测性、故障实验和 LWS + Kueue 运维证据。
+- 目标偏 AI Infra/Serving：保持当前比重，重点打磨同机 TP、EPP、扩缩容、可观测性和故障实验。

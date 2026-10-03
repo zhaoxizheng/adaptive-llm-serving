@@ -64,7 +64,7 @@
 | [Week 17 references](week-17-references.md) #3/#6/#7 | InferencePool failure mode、conformance 边界与 ext_proc timeout/stats |
 | [Week 18 references](week-18-references.md) #1–6 | llm-d routing、prefix/load tradeoff、cache identity 与固定源码 |
 | [Week 19 references](week-19-references.md) #1–4 | KServe alpha owner、configuration/status 与生成资源回滚边界 |
-| [Week 20 references](week-20-references.md) #1–5 | KEDA/adapter/WVA writer、fallback、cooldown 与 metric outage |
+| [Week 20 references](week-20-references.md) #1–4 | KEDA/adapter writer、fallback、cooldown 与 metric outage |
 | [Week 21 references](week-21-references.md) #1–4 | GKE live implementation、provider status 与 API migration 边界 |
 
 ## 阅读顺序
