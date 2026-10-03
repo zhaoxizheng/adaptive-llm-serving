@@ -27,7 +27,7 @@ Total allocated GPUs = replica count x G
 Start with the [20-week learning roadmap](docs/learning-roadmap.md), then use the
 weekly execution plans and reading lists:
 
-- [Week 1 execution plan](docs/week-01-plan.md) and [references](docs/week-01-references.md)
+- [Week 1 execution plan](docs/week-01-plan.md), [references](docs/week-01-references.md), and [code walkthrough](docs/week-01-code-walkthrough.md)
 - [Week 2 execution plan](docs/week-02-plan.md) and [references](docs/week-02-references.md)
 - [Week 3 execution plan](docs/week-03-plan.md) and [references](docs/week-03-references.md)
 - [Week 4 execution plan](docs/week-04-plan.md) and [references](docs/week-04-references.md)

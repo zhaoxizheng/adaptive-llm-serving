@@ -3,6 +3,8 @@
 > 时间预算：10–12 小时
 >
 > 本周主线：Mac 负责开发和记录，云端 NVIDIA GPU 负责执行。使用一个小模型，亲手观察 prefill、decode 和 KV Cache 对延迟的影响。
+>
+> 代码导读：[Week 1 Code Walkthrough](week-01-code-walkthrough.md)。
 
 ## 本周目标
 
