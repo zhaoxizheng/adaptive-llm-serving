@@ -1,0 +1,82 @@
+[
+  {
+    "query": "把 adaptive-llm-serving 的学习路线改成只保留单节点 vLLM 副本，并同步删除后续分布式周、README 入口和 references。",
+    "should_trigger": true
+  },
+  {
+    "query": "给这个 repo 的 roadmap 再追加四周，每周仍然 11 小时，同时去重所有 reference。",
+    "should_trigger": true
+  },
+  {
+    "query": "把 FooAutoscaler 从学习计划里彻底移除，只保留 HPA 和 KEDA，并更新下游引用编号。",
+    "should_trigger": true
+  },
+  {
+    "query": "检查 README、learning-roadmap 和所有 weekly plan 是否描述同一套最终架构，并修正不一致。",
+    "should_trigger": true
+  },
+  {
+    "query": "删掉 Week 17 以后不再需要的技术专题，但保留连续编号、实验交接和完成标准。",
+    "should_trigger": true
+  },
+  {
+    "query": "最近四周 references 有重复 URL，请整理首次引用并同步所有 #N 范围。",
+    "should_trigger": true
+  },
+  {
+    "query": "把最终 serving 架构定为 one Pod per replica，确认这个不变量传播到 routing、autoscaling、cost 和 capstone。",
+    "should_trigger": true
+  },
+  {
+    "query": "审计 docs/week-*.md 的计划/reference 配对、断链和每日工时，然后给我修复方案。",
+    "should_trigger": true
+  },
+  {
+    "query": "把 Week 20 从供应商私有 autoscaler 改成云无关方案，改完推送 GitHub。",
+    "should_trigger": true
+  },
+  {
+    "query": "这个课程终点变了，请重排后半段周计划并清理简历描述和目录树里的旧架构。",
+    "should_trigger": true
+  },
+  {
+    "query": "Ray 和 KubeRay 是什么关系？",
+    "should_trigger": false
+  },
+  {
+    "query": "解释 HPA 的扩缩容公式，给一个简单例子。",
+    "should_trigger": false
+  },
+  {
+    "query": "Week 14 里 tensor parallel 是什么意思？不要改文件。",
+    "should_trigger": false
+  },
+  {
+    "query": "帮我修复这个项目的 Python 单元测试失败。",
+    "should_trigger": false
+  },
+  {
+    "query": "查询今天 GCP L4 的价格和库存。",
+    "should_trigger": false
+  },
+  {
+    "query": "总结 docs/week-20-plan.md 的主要内容，不要修改。",
+    "should_trigger": false
+  },
+  {
+    "query": "为一个新的 Python 库写 README。",
+    "should_trigger": false
+  },
+  {
+    "query": "把这段英文学习笔记翻译成中文。",
+    "should_trigger": false
+  },
+  {
+    "query": "检查某个 Kubernetes Deployment 为什么 Pending。",
+    "should_trigger": false
+  },
+  {
+    "query": "创建一个全新的在线课程网站和首页。",
+    "should_trigger": false
+  }
+]

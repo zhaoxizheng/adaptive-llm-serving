@@ -1,6 +1,7 @@
 .DS_Store
 .env
 .experiment-source.json
+.trae/skills/roadmap-curator-workspace/
 .venv/
 .verify-venv/
 __pycache__/

@@ -1,0 +1,38 @@
+{
+  "skill_name": "roadmap-curator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Make the supplied sample roadmap single-host only: one replica may use multiple same-node GPUs, but remove the two distributed-replica weeks. Produce a complete change plan in plan.md without editing the fixture.",
+      "expected_output": "A repository-wide plan that deletes the two out-of-scope week pairs, changes duration, preserves same-host TP, propagates replica shape, and updates links and references.",
+      "files": ["evals/fixtures/sample-roadmap/README.md", "evals/fixtures/sample-roadmap/docs/roadmap.md"],
+      "expectations": [
+        "Deletes both out-of-scope plan/reference pairs and changes six weeks to four without changing unrelated retained technologies.",
+        "Preserves same-host TP and propagates replica shape into routing and autoscaling.",
+        "Includes entrypoint, cross-reference, broken-link, forbidden-term, and week-pair validation."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Remove FooAutoscaler completely from the supplied roadmap and retain only generic direct HPA and KEDA paths. Produce a complete change plan in plan.md without editing the fixture.",
+      "expected_output": "A plan that removes FooAutoscaler from plan, references and consumers, preserves mutually exclusive HPA/KEDA paths, and updates reference ranges.",
+      "files": ["evals/fixtures/sample-roadmap/README.md", "evals/fixtures/sample-roadmap/docs/week-04-plan.md", "evals/fixtures/sample-roadmap/docs/week-04-references.md"],
+      "expectations": [
+        "Removes the FooAutoscaler experiment and source instead of leaving a warning, while preserving unrelated roadmap phases.",
+        "Retains direct HPA and KEDA-managed HPA as mutually exclusive complete paths.",
+        "Updates downstream reference ranges and verifies zero FooAutoscaler residue."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Audit the supplied sample roadmap after a scope change. Produce audit.md listing every inconsistency that prevents it from being a coherent four-week single-host roadmap.",
+      "expected_output": "An audit that catches stale duration/index entries, orphan week files, ambiguous replica shape, stale reference ranges, and missing validation gates.",
+      "files": ["evals/fixtures/sample-roadmap/README.md", "evals/fixtures/sample-roadmap/docs/roadmap.md"],
+      "expectations": [
+        "Identifies stale six-week entrypoint text and Week 5-6 artifacts.",
+        "Identifies that same-host TP is not propagated to routing/autoscaling weeks.",
+        "Checks plan/reference parity, local links, duplicate URLs, forbidden terms, and hour totals."
+      ]
+    }
+  ]
+}
