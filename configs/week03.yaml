@@ -1,0 +1,107 @@
+model:
+  id: Qwen/Qwen2.5-0.5B-Instruct
+  revision: 7ae557604adf67be50417f59c2c2f167def9a775
+  dtype: bfloat16
+  local_files_only: true
+
+workload:
+  arrival_process: poisson
+  # duration_seconds includes warmup_seconds; only arrivals after warmup are measured.
+  duration_seconds: 120
+  warmup_seconds: 20
+  seed: 42
+  prompt_tokens: 256
+  output_tokens: 64
+  prompt: >-
+    Explain why dynamic request batching can improve throughput while increasing
+    latency for an individual language-model request.
+  padding_side: left
+
+calibration:
+  static_batch_sizes: [1, 2, 4, 8]
+  method: batch1_median_completed_requests_per_second
+  # Generated from validated Week 2 batch-size evidence on the same GPU/runtime.
+  artifact: results/week03/calibration.json
+
+scheduler:
+  queue_capacity: 128
+  admission_timeout_ms: 50
+
+matrix:
+  max_cases: 96
+  policy_defaults:
+    no_batching: {max_batch_size: 1, delay_ms: 0}
+    fixed_window: {max_batch_size: 8, delay_ms: 10}
+    size_or_time: {max_batch_size: 8, delay_ms: 10}
+
+  # 55 cases x 120 seconds = 1.83 raw GPU-hours plus startup and analysis overhead.
+  # This is the bounded 2-3 hour primary experiment. It keeps request shape fixed.
+  primary:
+    offered_load_ratio: [0.25, 0.50, 0.75, 0.90, 1.05]
+    policies: [no_batching, fixed_window, size_or_time]
+    repeats: 3
+    max_cases: 60
+    parameter_sweep:
+      offered_load_ratio: 0.75
+      policies: [fixed_window, size_or_time]
+      max_batch_size: [4, 8]
+      delay_ms: [2, 10, 20]
+      repeats: 1
+
+  # Exactly 20 pre-generated requests per policy for a short L4 wiring check.
+  smoke:
+    offered_load_ratio: [0.75]
+    policies: [no_batching, fixed_window, size_or_time]
+    repeats: 1
+    duration_seconds: 30
+    warmup_seconds: 0
+    max_requests: 20
+    max_cases: 3
+
+  # Opt-in full delay sweep: 87 deduplicated cases, 2.9 raw GPU-hours.
+  # Run only after the primary report identifies a question worth resolving.
+  extended:
+    offered_load_ratio: [0.25, 0.50, 0.75, 0.90, 1.05]
+    policies: [no_batching, fixed_window, size_or_time]
+    repeats: 3
+    max_cases: 96
+    parameter_sweep:
+      offered_load_ratio: 0.75
+      policies: [fixed_window, size_or_time]
+      max_batch_size: [4, 8]
+      delay_ms: [2, 5, 10, 20]
+      repeats: 3
+
+fake_backend:
+  # Deterministic teaching curve. No wall-clock sleep or GPU dependency is used.
+  capacity_rps: 25.0
+  service_time_ms_by_batch_size:
+    1: 40
+    2: 52
+    3: 63
+    4: 72
+    5: 84
+    6: 94
+    7: 104
+    8: 112
+  first_token_fraction: 0.25
+
+output:
+  root: results/week03
+  # Fake discrete-event output is physically separate and never formally verified.
+  simulation_root: results/week03-simulation
+  # Short real-HF wiring checks are also isolated from the formal primary run.
+  smoke_root: results/week03-smoke
+  environment_json: results/week03/environment.json
+  dependency_freeze: results/week03/dependency-freeze.txt
+  model_snapshot: results/week03/model-snapshot.json
+  run_log: results/week03/logs/week03.log
+  raw_events_csv: results/week03/raw/events.csv
+  raw_batches_csv: results/week03/raw/batches.csv
+  run_metadata: results/week03/raw/run_metadata.json
+  summary_csv: results/week03/summary.csv
+  analysis_json: results/week03/analysis.json
+  figures_dir: results/week03/figures
+  run_status: results/week03/run-status.json
+  verification_receipt: results/week03/verification-receipt.json
+  report_markdown: reports/week03.md

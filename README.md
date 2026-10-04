@@ -28,9 +28,9 @@ Start with the [20-week learning roadmap](docs/learning-roadmap.md), then use th
 weekly execution plans and reading lists:
 
 - [Week 1 execution plan](docs/week-01-plan.md), [references](docs/week-01-references.md), and [code walkthrough](docs/week-01-code-walkthrough.md)
-- [Week 2 execution plan](docs/week-02-plan.md) and [references](docs/week-02-references.md)
-- [Week 3 execution plan](docs/week-03-plan.md) and [references](docs/week-03-references.md)
-- [Week 4 execution plan](docs/week-04-plan.md) and [references](docs/week-04-references.md)
+- [Week 2 execution plan](docs/week-02-plan.md), [references](docs/week-02-references.md), and [code walkthrough](docs/week-02-code-walkthrough.md)
+- [Week 3 execution plan](docs/week-03-plan.md), [references](docs/week-03-references.md), and [code walkthrough](docs/week-03-code-walkthrough.md)
+- [Week 4 execution plan](docs/week-04-plan.md), [references](docs/week-04-references.md), and [code walkthrough](docs/week-04-code-walkthrough.md)
 - [Week 5 execution plan](docs/week-05-plan.md) and [references](docs/week-05-references.md)
 - [Week 6 execution plan](docs/week-06-plan.md) and [references](docs/week-06-references.md)
 - [Week 7 execution plan](docs/week-07-plan.md) and [references](docs/week-07-references.md)
@@ -188,6 +188,18 @@ If GCP stops the VM, start it again and rerun the same command. To intentionally
 | `make report` | Generate charts from raw benchmark data |
 | `make run-week01` | Run the complete evidence-producing Week 1 workflow |
 | `make verify` | Verify all Week 1 artifacts offline without running CUDA |
+| `make run-week02` | Run or resume the Week 2 HF static-batch matrix on the L4 |
+| `make verify-week02` | Verify the completed Week 2 evidence after the report is filled |
+| `make calibrate-week03` | Build the measured Week 3 batch-1 capacity artifact from complete Week 2 evidence |
+| `make simulate-week03` | Run the primary Week 3 scheduler matrix with the CPU-only fake backend in `results/week03-simulation` |
+| `make smoke-week03` | Run the three-policy, 20-request-per-policy HF/L4 smoke in `results/week03-smoke` |
+| `make run-week03` | Run or resume the official primary Week 3 HF/L4 matrix in `results/week03` |
+| `make verify-week03` | Verify canonical Week 3 evidence, requiring the primary profile and HF backend |
+| `make plan-week04` | Validate and print the Week 4 vLLM workflow without running vLLM or claiming GPU evidence |
+| `make run-week04` | Collect the pinned Week 4 vLLM GPU evidence with `.venv-vllm` on the L4 |
+| `make analyze-week04` | Normalize synced Week 4 results and generate the offline comparison artifacts |
+| `make audit-template-week04` | Create an unconfirmed cloud-resource audit template after syncing results |
+| `make verify-week04` | Verify the complete Week 4 evidence offline after reporting and cloud-resource audit |
 | `make test` | Run unit tests |
 | `make lint` | Run Ruff static checks |
 
@@ -196,6 +208,28 @@ Override the configuration when needed:
 ```bash
 make benchmark CONFIG=configs/week01.yaml PYTHON=.venv/bin/python
 ```
+
+Weeks 1–3 use `PYTHON` and the regular `.venv`; Week 4 deliberately uses
+`VLLM_PYTHON` and the separate `.venv-vllm`. The Week 3 fake simulation is a
+CPU semantics check, not performance evidence. Before `make run-week03`, provide
+the validated, measured batch-1 capacity artifact. The HF smoke and formal targets
+run `calibrate-week03` first and therefore require complete official Week 2 evidence
+from the same runtime. `make verify-week03` accepts only the canonical primary/HF run.
+
+For Week 4, inspect the local plan, then bootstrap the dedicated environment and
+run the GPU phase on the VM:
+
+```bash
+make plan-week04 PYTHON=.venv/bin/python
+bash scripts/bootstrap_vllm_gcp.sh .
+make run-week04
+```
+
+Plan mode validates configuration and prints commands only. It is not vLLM, CUDA,
+or benchmark evidence. After the GPU run, sync its evidence, stop the VM, run
+`make analyze-week04`, complete the report, create and fill the resource-audit
+template from real external evidence, then run `make verify-week04`. These post-sync
+steps use the regular `PYTHON` environment; verification rejects an unconfirmed audit.
 
 ## Experiment Contract
 

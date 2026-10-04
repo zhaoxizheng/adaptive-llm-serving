@@ -64,7 +64,13 @@ def _critical_source_files(root: Path | None = None) -> dict[str, str]:
 
 def _actual_critical_source_paths(root: Path) -> set[str]:
     paths: set[str] = set()
-    for name in ("Makefile", "pyproject.toml", "requirements.txt", "requirements-dev.txt"):
+    for name in (
+        "Makefile",
+        "pyproject.toml",
+        "requirements.txt",
+        "requirements-dev.txt",
+        "requirements-vllm.txt",
+    ):
         if (root / name).is_file():
             paths.add(name)
     for directory_name in ("configs", "scripts", "src"):
@@ -113,6 +119,7 @@ def source_identity(
                 "pyproject.toml",
                 "requirements.txt",
                 "requirements-dev.txt",
+                "requirements-vllm.txt",
                 "configs",
                 "scripts",
                 "src",

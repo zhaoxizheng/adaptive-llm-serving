@@ -3,6 +3,7 @@
 .experiment-source.json
 .trae/skills/roadmap-curator-workspace/
 .venv/
+.venv-vllm/
 .verify-venv/
 __pycache__/
 *.py[cod]

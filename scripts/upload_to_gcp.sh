@@ -29,6 +29,7 @@ gcloud compute scp --recurse \
   "${PROJECT_DIR}/pyproject.toml" \
   "${PROJECT_DIR}/requirements.txt" \
   "${PROJECT_DIR}/requirements-dev.txt" \
+  "${PROJECT_DIR}/requirements-vllm.txt" \
   "${PROJECT_DIR}/configs" \
   "${PROJECT_DIR}/docs" \
   "${PROJECT_DIR}/reports" \

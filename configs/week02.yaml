@@ -1,0 +1,47 @@
+model:
+  id: Qwen/Qwen2.5-0.5B-Instruct
+  revision: 7ae557604adf67be50417f59c2c2f167def9a775
+  dtype: bfloat16
+  local_files_only: true
+
+generation:
+  prompt: >-
+    Explain why caching intermediate attention keys and values makes
+    autoregressive language-model generation faster.
+  seed: 42
+  decoding: greedy
+  padding_side: left
+
+benchmark:
+  warmup_runs: 2
+  repeats: 5
+  use_cache: true
+  smoke_batch_sizes: [1, 2, 4]
+  sweeps:
+    prompt_length:
+      batch_size: 1
+      prompt_tokens: [32, 256, 1024, 2048]
+      output_tokens: 64
+    output_length:
+      batch_size: 1
+      prompt_tokens: 256
+      output_tokens: [16, 64, 256]
+    batch_size:
+      batch_size: [1, 2, 4, 8, 16]
+      prompt_tokens: 256
+      output_tokens: 64
+
+output:
+  environment_json: results/week02/environment.json
+  dependency_freeze: results/week02/dependency-freeze.txt
+  model_snapshot: results/week02/model-snapshot.json
+  run_log: results/week02/logs/week02.log
+  run_status: results/week02/run-status.json
+  verification_receipt: results/week02/verification-receipt.json
+  smoke_json: results/week02/smoke.json
+  raw_csv: results/week02/raw/batch-sweeps.csv
+  run_metadata: results/week02/raw/run_metadata.json
+  summary_csv: results/week02/summary.csv
+  analysis_json: results/week02/analysis.json
+  figures_dir: results/week02/figures
+  report_markdown: reports/week02.md

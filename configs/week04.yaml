@@ -1,0 +1,106 @@
+schema_version: 1
+
+model:
+  id: Qwen/Qwen2.5-0.5B-Instruct
+  revision: 7ae557604adf67be50417f59c2c2f167def9a775
+  served_model_name: week04-qwen2.5-0.5b
+  dtype: bfloat16
+
+server:
+  host: 127.0.0.1
+  port: 8000
+  max_model_len: 4096
+  gpu_memory_utilization: 0.85
+  max_num_seqs: 16
+  max_num_batched_tokens: 4096
+  enable_prefix_caching: false
+  startup_timeout_seconds: 600
+  readiness_poll_seconds: 2
+  shutdown_timeout_seconds: 30
+  log_path: results/week04/raw/server.log
+  pid_metadata_path: results/week04/raw/server-process.json
+  serve_help_path: results/week04/raw/vllm-serve-help.txt
+  models_snapshot_path: results/week04/raw/models-ready.json
+
+smoke:
+  prompt: Explain continuous batching in one short sentence.
+  requested_output_tokens: 16
+  temperature: 0.0
+  seed: 42
+  timeout_seconds: 60
+
+benchmark:
+  backend: vllm
+  endpoint: /v1/completions
+  dataset_name: random
+  seed: 42
+  warmup_requests: 20
+  num_prompts: 200
+  repeats: 3
+  timeout_seconds: 900
+  metric_percentiles: [50, 95, 99]
+  concurrency: [1, 2, 4, 8, 16]
+  request_rates: [1.0, 2.0, 4.0, 8.0]
+  workloads:
+    short-chat:
+      prompt_tokens: 128
+      output_tokens: 32
+    balanced:
+      prompt_tokens: 256
+      output_tokens: 64
+    long-context:
+      prompt_tokens: 2048
+      output_tokens: 32
+    generation:
+      prompt_tokens: 128
+      output_tokens: 256
+    mixed:
+      prompt_tokens: [128, 256, 2048]
+      output_tokens: [32, 64, 256]
+  primary:
+    closed_loop_workloads: [short-chat, balanced, long-context, generation]
+    open_loop_workloads: [balanced]
+  comparison:
+    workload: balanced
+    base_prompt: >-
+      Explain why dynamic request batching can improve throughput while increasing
+      latency for an individual language-model request.
+    week03_results: results/week03/summary.csv
+    week03_config: configs/week03.yaml
+    arrival_trace_dir: results/week03/raw/traces
+    week03_run_metadata: results/week03/raw/run_metadata.json
+    week03_events: results/week03/raw/events.csv
+    week03_verification_receipt: results/week03/verification-receipt.json
+    week03_run_status: results/week03/run-status.json
+    profile: primary
+    backend: hf
+    max_workers: 128
+    max_p99_arrival_lag_ms: 100
+  slo:
+    p99_ttft_ms: 2000
+    p99_tpot_ms: 100
+    max_error_rate: 0.0
+
+output:
+  raw_dir: results/week04/raw
+  environment_json: results/week04/raw/environment.json
+  dependency_freeze: results/week04/raw/pip-freeze.txt
+  vllm_version: results/week04/raw/vllm-version.txt
+  vllm_help: results/week04/raw/vllm-help.txt
+  serve_help: results/week04/raw/vllm-serve-help.txt
+  bench_serve_help: results/week04/raw/bench-serve-help.txt
+  offline_smoke_json: results/week04/raw/offline-smoke.json
+  nonstream_smoke_json: results/week04/raw/openai-nonstream-smoke.json
+  stream_smoke_json: results/week04/raw/openai-stream-smoke.json
+  benchmark_manifest: results/week04/raw/benchmark-manifest.json
+  comparison_manifest: results/week04/raw/comparison-manifest.json
+  trace_replay_dir: results/week04/raw/trace-replay
+  normalized_jsonl: results/week04/normalized/results.jsonl
+  analysis_json: results/week04/analysis.json
+  server_metrics_dir: results/week04/raw/metrics
+  run_metadata: results/week04/raw/run-metadata.json
+  run_status: results/week04/run-status.json
+  gpu_resource_audit: results/week04/gpu-resource-audit.json
+  figures_dir: results/week04/figures
+  report_markdown: reports/week04.md
+  verification_receipt: results/week04/verification-receipt.json

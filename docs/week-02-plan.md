@@ -1,8 +1,10 @@
 # Week 2 Plan: 建立 Batch、长度、吞吐和显存的性能直觉
 
-> 时间预算：10–12 小时
+> 时间预算：11 小时
 >
 > 本周主线：继续使用 Hugging Face Transformers 和 GCP L4，不引入 vLLM。把第一周的单请求实验扩展为受控的长度与静态 batch 实验，建立 latency、throughput 和 memory 之间的定量关系。
+>
+> 代码导读：[Week 2 Code Walkthrough](week-02-code-walkthrough.md)。
 
 ## 本周目标
 
@@ -15,6 +17,22 @@
 5. 产出可复现的三组受控 sweep 和一份有明确结论的报告。
 
 本周不追求生产级调度器。动态 batching 只做接口设计或极小原型，不与正式性能结论混在一起。
+
+## 执行入口
+
+在已提交且工作区干净的 GPU VM checkout 中运行或恢复正式矩阵：
+
+```bash
+make run-week02 PYTHON=.venv/bin/python
+```
+
+同步证据并停止 VM，按实测结果完成 `reports/week02.md` 后，在 Mac 上执行离线证据门禁：
+
+```bash
+make verify-week02 PYTHON=.venv/bin/python
+```
+
+`run-week02` 会准备固定 revision 的模型并检查 CUDA 环境。正式 CSV 开始前，它自动运行 batch 1/2/4、shape `[batch, 256] -> [batch, 64]` 的 smoke，并要求 batch 1 的输入和生成 token 与 Week 1 reference path 完全一致；任何 smoke/parity 失败都会保存失败证据并中止。通过后才增量保存 60 个正式 terminal cases 并生成分析。`verify-week02` 不运行 CUDA，也不会替代报告填写。
 
 ## 本周最终产出
 
@@ -113,7 +131,17 @@ batch 后再乘 `batch_size`。其中：
 
 ## 每日安排
 
-## Day 1：复盘 Week 1，冻结指标定义（约 1.5 小时，本地）
+| 日期 | 预算 | 任务与产出 |
+|---|---:|---|
+| Day 1 | 1.5 h | 复盘 Week 1，冻结指标、计时与三个 sweep 的比较契约 |
+| Day 2 | 1.5 h | 完成 KV Cache 估算、batch 输入和对应单元测试 |
+| Day 3 | 2 h | 扩展 benchmark harness、显存采集和可恢复落盘 |
+| Day 4 | 1.5 h | 在 L4 完成 smoke、parity 检查与 Prompt Sweep |
+| Day 5 | 2 h | 完成 Output/Batch Sweep，保存 OOM 与原始证据 |
+| Day 6 | 1.5 h | 离线分析并生成四张受控对比图 |
+| Day 7 | 1 h | 完成报告、验收、结果同步与资源检查 |
+
+## Day 1：复盘 Week 1，冻结指标定义（1.5 小时，本地）
 
 - [ ] 阅读 Week 1 报告模板和 benchmark 代码
 - [ ] 把上述指标契约写入 Week 2 report
@@ -123,7 +151,7 @@ batch 后再乘 `batch_size`。其中：
 
 验收：不用看代码，也能说清楚每个 timer 的起止点和单位。
 
-## Day 2：显存模型与 batch 输入（约 1.5–2 小时，本地）
+## Day 2：显存模型与 batch 输入（1.5 小时，本地）
 
 - [ ] 从 Qwen2 config 读取 layer、KV head、head dimension 和 dtype
 - [ ] 实现 `kv_cache_estimator.py`
@@ -134,7 +162,7 @@ batch 后再乘 `batch_size`。其中：
 
 验收：估算器结果可以由一条独立公式复核；padding token 不参与有效 attention。
 
-## Day 3：扩展 benchmark harness（约 2 小时，本地）
+## Day 3：扩展 benchmark harness（2 小时，本地）
 
 - [ ] 新增 `configs/week02.yaml`
 - [ ] 实现 batched prefill 和 batched greedy decode
@@ -145,12 +173,12 @@ batch 后再乘 `batch_size`。其中：
 
 验收：本地测试和静态检查通过；不需要启动 GPU。
 
-## Day 4：GCP smoke 与 Prompt Sweep（约 1–1.5 个计费小时）
+## Day 4：GCP smoke 与 Prompt Sweep（1.5 个计费小时）
 
 启动前确认本地代码已 commit。VM 上先执行：
 
 ```bash
-make check-env PYTHON=.venv/bin/python
+make check-env CONFIG=configs/week02.yaml PYTHON=.venv/bin/python
 make test PYTHON=.venv/bin/python
 ```
 
@@ -162,7 +190,7 @@ make test PYTHON=.venv/bin/python
 - [ ] 检查 2048-token case 是否异常波动或 OOM
 - [ ] 同步原始结果并停止 VM
 
-## Day 5：Output 与 Batch Sweep（约 1.5–2 个计费小时）
+## Day 5：Output 与 Batch Sweep（2 个计费小时）
 
 - [ ] 完成 Output Length Sweep
 - [ ] 先跑 batch `[1, 2, 4]`
@@ -172,7 +200,7 @@ make test PYTHON=.venv/bin/python
 - [ ] 遇到 OOM 时保存失败配置和错误，不修改已有成功结果
 - [ ] 同步结果并停止 VM
 
-## Day 6：分析与画图（约 2 小时，本地）
+## Day 6：分析与画图（1.5 小时，本地）
 
 至少生成：
 
@@ -191,7 +219,7 @@ make test PYTHON=.venv/bin/python
 - latency 增长来自单步计算，还是更多 decode step？
 - 理论 KV Cache 与实测显存增量相差多少？差额来自哪里？
 
-## Day 7：写报告与复盘（约 1–1.5 小时，本地）
+## Day 7：写报告与复盘（1 小时，本地）
 
 报告结构：
 
@@ -213,11 +241,11 @@ make test PYTHON=.venv/bin/python
 
 | 内容 | 时间 | 地点 |
 |---|---:|---|
-| 指标与阅读 | 2 小时 | Mac |
-| 代码与测试 | 3–3.5 小时 | Mac |
-| GCP 实验 | 2.5–3.5 小时 | L4 Spot |
-| 分析与报告 | 3 小时 | Mac |
-| **总计** | **约 10.5–12 小时** | **GPU 约 2.5–3.5 小时** |
+| 指标与阅读 | 1.5 小时 | Mac |
+| 代码与测试 | 3.5 小时 | Mac |
+| GCP 实验 | 3.5 小时 | L4 Spot |
+| 分析与报告 | 2.5 小时 | Mac |
+| **总计** | **11 小时** | **GPU 3.5 小时** |
 
 ## 本周不要做什么
 

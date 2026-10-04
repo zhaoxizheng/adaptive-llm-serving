@@ -1,14 +1,39 @@
 # Week 3 Plan: 动态 Batching、排队与尾延迟
 
-> 时间预算：10–12 小时
+> 时间预算：11 小时
 >
 > 本周主线：在 Week 2 静态 batch 基线之上，实现一个教学型 dynamic request batching scheduler。通过可重复的 Poisson 到达流量，定量观察 batch 等待、GPU service time、吞吐和 P95/P99 延迟之间的关系。
+>
+> 代码导读：[Week 3 Code Walkthrough](week-03-code-walkthrough.md)。
 
 ## 本周边界
 
 本周实现的是 **request-level dynamic batching**：若干请求先进入队列，再组成一个静态 batch，一旦 dispatch，这个 batch 会一起执行到结束。它用于理解排队和组 batch 的代价。
 
 它不是 vLLM 的 continuous batching，也不尝试复刻 iteration-level scheduler、PagedAttention、KV block 管理或 preemption。Week 4 会用 vLLM 观察这些机制带来的真实效果。
+
+本地 `fake` backend 是不 sleep、无需 Torch 的离散事件模拟，只验证 trace、排队、batch 边界、落盘和分析语义，不能作为吞吐或延迟证据。正式 Week 3 结果必须使用目标 L4 上的 Hugging Face (`hf`) backend；L4 smoke 也显式使用 `hf`，但只验证接线，不代替正式矩阵。
+
+## 执行入口与证据边界
+
+```bash
+# CPU-only semantics; isolated from formal artifacts
+make simulate-week03 PYTHON=.venv/bin/python
+
+# Build the measured batch-1 capacity artifact from complete Week 2 evidence
+make calibrate-week03 PYTHON=.venv/bin/python
+
+# Three HF/L4 policy cases, exactly 20 trace requests per policy
+make smoke-week03 PYTHON=.venv/bin/python
+
+# Official primary HF/L4 matrix; uses canonical results/week03
+make run-week03 PYTHON=.venv/bin/python
+
+# Post-sync/report evidence gate; rejects fake or non-primary metadata
+make verify-week03 PYTHON=.venv/bin/python
+```
+
+`calibrate-week03` 从完整、正式的 Week 2 batch-size evidence 生成 `results/week03/calibration.json`，并以 batch 1 completed repeats 的 median requests/s 作为 capacity。`smoke-week03` 和 `run-week03` 都先执行这个 deterministic validation，并要求校准与当前 Week 3 model/GPU/runtime 完全匹配。`simulate-week03` 写入 `results/week03-simulation`，`smoke-week03` 写入 `results/week03-smoke`，因此不会污染正式目录。只有 `run-week03` 写入 canonical `results/week03`，且只有完整的 `primary` + `hf` 证据可通过 `verify-week03`。
 
 ## 本周目标
 
@@ -56,7 +81,7 @@ deterministic arrival trace
  request events + batch events
 ```
 
-只使用一个 GPU worker，避免把多 worker 并行与 batching policy 混为同一变量。producer 根据预先生成的 trace 在 monotonic clock 上释放请求；所有策略复用完全相同的 trace。
+只使用一个 worker，避免把多 worker 并行与 batching policy 混为同一变量。runner 预先生成 trace，所有策略复用完全相同的 trace。`fake` backend 用显式 virtual timestamp 驱动离散事件；正式 `hf` backend 则必须按真实 monotonic clock 释放 arrival，并由单个 L4 worker 串行执行 batch。
 
 ## 三种策略的精确定义
 
@@ -122,25 +147,21 @@ batch_fill_ratio  = actual_batch_size / max_batch_size
 - 各 batch size 的 observed requests/s
 - 不发生持续排队时的近似可服务速率
 
+正式运行前，必须运行 `make calibrate-week03`。它验证完整 Week 2 raw rows、metadata、model/runtime/source identity，从 `prompt=256, output=64` 的 batch-size sweep 构建 `results/week03/calibration.json`；正式 runner 只接受该 artifact，并用 batch 1 completed repeats 的 median requests/s 计算 offered load。`fake` backend 使用配置中的 synthetic capacity，但只能产生 simulation evidence。
+
 ### 主实验：固定请求 shape
 
 保持 `prompt=256, output=64`，避免 padding 和长度差异干扰 batching policy。
 
-```yaml
-arrival_process: poisson
-duration_seconds: 120
-warmup_seconds: 20
-seed: 42
-offered_load_ratio: [0.25, 0.50, 0.75, 0.90, 1.05]
-policies: [no_batching, fixed_window, size_or_time]
-max_batch_size: [4, 8]
-max_wait_ms: [2, 5, 10, 20]
-queue_capacity: 128
-admission_timeout_ms: 50
-repeats: 3
-```
+实现提供三个有界 profile：
 
-`offered_load_ratio` 相对于校准得到的基准 capacity 生成，而不是拍脑袋指定 requests/s。1.05 用于有界过载实验，只运行足够观察 queue growth 和 rejection 的短时间。
+| Profile | Backend / 用途 | 有界规模 |
+|---|---|---:|
+| `smoke` | `hf`，仅验证 L4 接线 | 3 个 policy cases，每个恰好 20 个 trace requests |
+| `primary` | `hf`，正式证据 | 55 cases × 120 秒，约 1.83 raw GPU-hours |
+| `extended` | 可选追加问题 | 87 个去重 cases × 120 秒，约 2.9 raw GPU-hours |
+
+`primary` 包含五档 offered load（0.25、0.50、0.75、0.90、1.05）、三种 policy、三次重复，以及 0.75 load 下聚焦的 batch-size/delay sweep。1.05 只用于观察有界过载。`extended` 增加完整 delay sweep，只在 primary 报告提出明确待验证问题时运行，不能作为默认必跑矩阵。
 
 ### 选做：Mixed lengths
 
@@ -153,7 +174,17 @@ repeats: 3
 
 ## 每日安排
 
-### Day 1：排队模型和指标设计（约 1.5 小时，本地）
+| 日期 | 预算 | 任务与产出 |
+|---|---:|---|
+| Day 1 | 1.5 h | 冻结排队模型、指标、状态转换与 overload contract |
+| Day 2 | 1.5 h | 实现 deterministic arrival trace 与 workload schema |
+| Day 3 | 2 h | 实现 scheduler 纯逻辑、virtual-time 测试与 shutdown invariants |
+| Day 4 | 1.5 h | 接入 HF worker，完成三种 policy 的 L4 smoke 与事件校验 |
+| Day 5 | 2 h | 校准 capacity 并运行正式 55-case primary matrix |
+| Day 6 | 1.5 h | 离线计算吞吐、尾延迟、queue 与 rejection 证据 |
+| Day 7 | 1 h | 完成报告、Week 4 假设、结果同步与资源检查 |
+
+### Day 1：排队模型和指标设计（1.5 小时，本地）
 
 - [ ] 阅读 dynamic batching、Orca 和 tail latency 的核心资料
 - [ ] 画出 request lifecycle 并冻结所有时间戳定义
@@ -163,7 +194,7 @@ repeats: 3
 
 验收：给定五个请求的到达时间，能手工推出三种策略各自的 batch 和 dispatch 时间。
 
-### Day 2：Workload generator（约 1.5 小时，本地）
+### Day 2：Workload generator（1.5 小时，本地）
 
 - [ ] 使用固定 seed 生成 exponential inter-arrival time
 - [ ] 将 arrival trace 预先写入 JSONL/CSV
@@ -173,35 +204,35 @@ repeats: 3
 
 验收：三种策略可以读取同一份 trace 做公平对比。
 
-### Day 3：Scheduler 与测试（约 2 小时，本地）
+### Day 3：Scheduler 与测试（2 小时，本地）
 
-- [ ] 实现 bounded `asyncio.Queue`
+- [ ] 实现纯逻辑的有界 FIFO queue 和 `VirtualTimeScheduler`
 - [ ] 实现 no batching、fixed window、size-or-time
-- [ ] 使用 `time.monotonic_ns()`，不使用 wall clock 计算 duration
+- [ ] 用显式 virtual timestamp 驱动 arrival、deadline 和 worker completion
 - [ ] 用 fake clock/fake worker 测试 size flush、timeout flush、FIFO 和 shutdown
 - [ ] 验证取消和异常不会遗留未完成 request
 
 验收：不启动 GPU 即可确定 batch 边界和时间语义正确。
 
-### Day 4：接入 Week 2 GPU worker（约 2 小时，本地 + 0.5 小时 GPU）
+### Day 4：接入 Week 2 GPU worker（1 小时本地 + 0.5 小时 GPU）
 
 - [ ] 将 batching policy 与模型执行分层
 - [ ] 接入 batched prefill 和 greedy decode
 - [ ] 为每个请求记录 first-token 与 completion event
 - [ ] 逐请求和逐 batch 增量落盘
-- [ ] 在 GCP L4 上跑 20 个请求 smoke test
+- [ ] 在 GCP L4 上对三种 policy 各跑 20 个请求的 `hf` smoke test
 - [ ] 检查事件时间顺序 invariant
 
-### Day 5：主实验（约 2–3 个计费小时）
+### Day 5：主实验（2 个计费小时）
 
-- [ ] 重新校准本次 VM 的 batch service capacity
-- [ ] 先跑 0.25、0.75 和 1.05 三档 smoke matrix
-- [ ] 再完成全部 offered load 与策略组合
+- [ ] 测量本次 VM 的稳定 batch-1 capacity，并生成 runner 可验证的校准证据
+- [ ] 先完成隔离目录中的三 case、每 policy 20-request HF smoke
+- [ ] 再完成 55-case `primary` HF matrix（约 1.83 raw GPU-hours）
 - [ ] 每个组合使用同一 arrival trace 并重复 3 次
 - [ ] 每完成一个 case 立即落盘
 - [ ] 同步结果并停止 Spot VM
 
-### Day 6：分析（约 1.5–2 小时，本地）
+### Day 6：分析（1.5 小时，本地）
 
 至少生成：
 
@@ -212,7 +243,7 @@ repeats: 3
 
 同时报告 achieved throughput、completion rate 和 rejection rate，不能只画成功请求的 latency。
 
-### Day 7：报告和 Week 4 假设（约 1–1.5 小时，本地）
+### Day 7：报告和 Week 4 假设（1 小时，本地）
 
 - [ ] 找到每种策略开始持续排队的 offered load
 - [ ] 比较低负载下 batching 的固定等待成本
@@ -230,7 +261,7 @@ repeats: 3
 
 - 所有策略使用相同模型 revision、dtype、GPU、prompt/output tokens 和 arrival trace。
 - benchmark 前 warm up；统计窗口不包括 server startup 和模型加载。
-- client concurrency 足以发送 trace，但不能让 client event loop 成为瓶颈。
+- `fake` 使用 virtual time；`hf` 使用 monotonic wall clock 释放 arrival 并记录 producer lag，不能把二者的时间结果混为同一证据。
 - 超过队列容量时显式 reject，不允许无限积压直到 VM 被停止。
 - timeout 后记录状态并清理资源，不能把超时请求悄悄算作零延迟。
 - Spot 抢占后按 case 恢复，不拼接不完整时间窗口。
@@ -243,6 +274,7 @@ repeats: 3
 - 不用平均 latency 代替 P95/P99 和 rejection rate。
 - 不在同一主实验中同时改变 arrival rate、batch size、wait window 和请求长度。
 - 不在 Mac 上加载模型或跑正式 benchmark。
+- 不把 `fake` simulation 或 20-request HF smoke 写成正式性能结果。
 
 ## 完成标准
 
@@ -253,4 +285,5 @@ repeats: 3
 - [ ] 至少找到一个进入 overload 后 queue 持续增长的配置
 - [ ] 报告包含 rejection、失败和 arrival lag，而不只展示成功样本
 - [ ] 明确写出 request-level batching 与 continuous batching 的差异
+- [ ] 正式 metadata 明确为 `profile=primary`、`backend=hf`，并使用本机实测 batch-1 capacity
 - [ ] GCP VM 已停止，结果已同步并绑定 Git commit
