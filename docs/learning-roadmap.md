@@ -210,6 +210,11 @@ estimated_cost: <amount-and-currency>
 [Week 7：请求链路](week-07-code-walkthrough.md)、[Week 8：Scheduler](week-08-code-walkthrough.md)。
 源码地图与 patch 可离线核对；runtime trace 和机制验证在单张 L4 上完成。
 
+第 9–10 周也已提供代码、默认关闭的 trace patch 和中文导读：
+[Week 9：KV block 生命周期](week-09-code-walkthrough.md)、
+[Week 10：GPU Worker / Model Runner](week-10-code-walkthrough.md)。
+Patch 顺序、源码环境和运行前置条件见 [第 9–12 周运行约定](week-09-12-runbook.md)。
+
 ### 每周主线
 
 - Week 7：追踪 OpenAI API、AsyncLLM 与 Engine Core 的请求链路
@@ -272,6 +277,11 @@ Attention / CUDA Graph / Model
 ## 第四阶段：推理性能专项（第 11–14 周）
 
 执行计划：[Week 11](week-11-plan.md) / [资料](week-11-references.md)、[Week 12](week-12-plan.md) / [资料](week-12-references.md)、[Week 13](week-13-plan.md) / [资料](week-13-references.md)、[Week 14](week-14-plan.md) / [资料](week-14-references.md)。
+
+第 11–12 周已有成对 baseline/profile runner、离线摘要和中文导读：
+[Week 11：PyTorch Profiler](week-11-code-walkthrough.md)、
+[Week 12：Nsight Systems](week-12-code-walkthrough.md)。代码生成和 CPU 测试不代表已完成
+GPU capture；报告需用真实 trace、overhead、shape 检查和资源停止证据填写。
 
 ### 每周主线
 

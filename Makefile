@@ -10,13 +10,18 @@ WEEK05_CONFIG ?= configs/week05.yaml
 WEEK06_CONFIG ?= configs/week06.yaml
 WEEK07_CONFIG ?= configs/week07.yaml
 WEEK08_CONFIG ?= configs/week08.yaml
+WEEK09_CONFIG ?= configs/week09.yaml
+WEEK10_CONFIG ?= configs/week10.yaml
+WEEK11_CONFIG ?= configs/week11-profiler.yaml
+WEEK12_CONFIG ?= configs/week12-nsys.yaml
 WEEK06_PHASE ?= representation
 
 .PHONY: install install-dev check-env prepare-model smoke benchmark report run-week01 verify \
 	run-week02 verify-week02 calibrate-week03 simulate-week03 smoke-week03 run-week03 verify-week03 \
 	plan-week04 run-week04 analyze-week04 audit-template-week04 verify-week04 test lint \
 	plan-week05 run-week05 analyze-week05 plan-week06 run-week06 analyze-week06 \
-	plan-week07 run-week07 plan-week08 run-week08
+	plan-week07 run-week07 plan-week08 run-week08 \
+	plan-week09 run-week09 plan-week10 run-week10 plan-week11 run-week11 plan-week12 run-week12
 
 install:
 	$(PYTHON) -m pip install -r requirements.txt
@@ -110,6 +115,12 @@ plan-week08:
 
 run-week08:
 	$(VLLM_PYTHON) -m scripts.run_source_study --config $(WEEK08_CONFIG) --run
+
+plan-week09 plan-week10 plan-week11 plan-week12:
+	$(PYTHON) -m scripts.run_deep_study --config $(WEEK$(patsubst plan-week%,%,$@)_CONFIG) --plan
+
+run-week09 run-week10 run-week11 run-week12:
+	$(VLLM_PYTHON) -m scripts.run_deep_study --config $(WEEK$(patsubst run-week%,%,$@)_CONFIG) --run
 
 test:
 	$(PYTHON) -m pytest -q

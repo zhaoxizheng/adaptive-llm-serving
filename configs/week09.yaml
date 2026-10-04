@@ -1,0 +1,32 @@
+schema_version: 1
+week: 9
+week07_config: configs/week07.yaml
+output_root: results/week09
+timeout_seconds: 180
+seed: 42
+event_limit: 100000
+server_overrides: {enable_prefix_caching: true, block_size: 16}
+scenarios:
+  cold:
+    requests:
+      - {request_id: cold, prompt_tokens: 544, output_tokens: 8, prefix_family: shared, shared_tokens: 512}
+  exact:
+    requests:
+      - {request_id: exact1, prompt_tokens: 544, output_tokens: 8, prefix_family: shared, shared_tokens: 512}
+      - {request_id: exact2, prompt_tokens: 544, output_tokens: 8, prefix_family: shared, shared_tokens: 512}
+  partial:
+    requests:
+      - {request_id: partial1, prompt_tokens: 544, output_tokens: 8, prefix_family: shared, shared_tokens: 519}
+      - {request_id: partial2, prompt_tokens: 544, output_tokens: 8, prefix_family: shared, shared_tokens: 519}
+  pressure:
+    overrides: {num_gpu_blocks_override: 96}
+    requests:
+      - {request_id: old, prompt_tokens: 1024, output_tokens: 8, prefix_family: old, shared_tokens: 1024}
+      - {request_id: fill1, prompt_tokens: 1024, output_tokens: 8, prefix_family: fill1, shared_tokens: 1024}
+      - {request_id: fill2, prompt_tokens: 1024, output_tokens: 8, prefix_family: fill2, shared_tokens: 1024}
+      - {request_id: recent, prompt_tokens: 1024, output_tokens: 8, prefix_family: fill2, shared_tokens: 1024}
+      - {request_id: replay-old, prompt_tokens: 1024, output_tokens: 8, prefix_family: old, shared_tokens: 1024}
+  abort:
+    requests:
+      - {request_id: abort, prompt_tokens: 128, output_tokens: 2048, abort: true}
+      - {request_id: after-abort, prompt_tokens: 128, output_tokens: 8}

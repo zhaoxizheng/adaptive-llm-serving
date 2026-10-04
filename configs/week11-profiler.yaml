@@ -1,0 +1,16 @@
+schema_version: 1
+week: 11
+week07_config: configs/week07.yaml
+workload_config: configs/profiling-workloads.yaml
+output_root: results/week11
+timeout_seconds: 180
+seed: 42
+event_limit: 100000
+warmup_requests: 3
+server_overrides: {enable_prefix_caching: false}
+profiler: {record_shapes: true, profile_memory: true, with_stack: false}
+scenarios:
+  short_prefill: {workload: short_prefill, capture: {wait: 0, warmup: 0, active: 1}}
+  long_prefill: {workload: long_prefill, capture: {wait: 0, warmup: 0, active: 1}}
+  decode: {workload: decode, capture: {wait: 2, warmup: 2, active: 16}}
+  mixed: {workload: mixed, capture: {wait: 0, warmup: 1, active: 64}}

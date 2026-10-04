@@ -107,14 +107,14 @@ diff --git a/vllm/entrypoints/openai/serving_completion.py b/vllm/entrypoints/op
 diff --git a/vllm/v1/core/sched/scheduler.py b/vllm/v1/core/sched/scheduler.py
 --- a/vllm/v1/core/sched/scheduler.py
 +++ b/vllm/v1/core/sched/scheduler.py
-@@ -1,6 +1,7 @@
- # SPDX-License-Identifier: Apache-2.0
- # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+@@ -3,6 +3,7 @@
  
-+from vllm._study_trace import emit as study_emit, enabled as study_enabled
  from __future__ import annotations
  
++from vllm._study_trace import emit as study_emit, enabled as study_enabled
  import itertools
+ import time
+ from collections import defaultdict
 @@ -1094,6 +1095,8 @@
      def add_request(self, request: Request) -> None:
          self.waiting.add_request(request)

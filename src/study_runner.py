@@ -69,7 +69,8 @@ def runtime_identity(*, source_study=False):
 
 
 @contextlib.contextmanager
-def managed_server(base, argv, root, *, env=None):
+def managed_server(base, argv, root, *, env=None, source_study=False, launch_prefix=None,
+                   shutdown_signal=signal.SIGTERM):
     """Own a new process group; never attach to or kill an existing server."""
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
@@ -82,11 +83,11 @@ def managed_server(base, argv, root, *, env=None):
     url = f"http://{'[' + host + ']' if ':' in host else host}:{port}"
     # Source-study callers verified the exact commit, patch bytes and import path.
     # Editable builds can carry a local/dev suffix despite matching that source.
-    runtime = runtime_identity(source_study=bool(env and env.get("VLLM_STUDY_TRACE_DIR")))
+    runtime = runtime_identity(source_study=source_study or bool(env and env.get("VLLM_STUDY_TRACE_DIR")))
     binary = Path(os.sys.executable).parent / "vllm"
     if not binary.is_file():
         raise RuntimeError("vllm CLI is missing from the selected Python environment")
-    launch_argv = [str(binary), *argv[1:]]
+    launch_argv = [*(launch_prefix or []), str(binary), *argv[1:]]
     help_text = subprocess.check_output([str(binary), "serve", "--help=all"], text=True, timeout=60)
     validate_help_support(argv, help_text)
     write_text(root / "serve-help.txt", help_text)
@@ -103,6 +104,9 @@ def managed_server(base, argv, root, *, env=None):
     write_json(root / "server.json", metadata)
     environment = {**os.environ, "VLLM_USE_V1": "1"}
     environment.pop("VLLM_STUDY_TRACE_DIR", None)
+    environment.pop("VLLM_KV_TRACE_DIR", None)
+    environment.pop("VLLM_EXECUTION_CONFIG", None)
+    environment.pop("VLLM_TORCH_PROFILER_DIR", None)
     environment.update(env or {})
     process = None
     with (root / "server.log").open("w", encoding="utf-8") as log:
@@ -143,7 +147,7 @@ def managed_server(base, argv, root, *, env=None):
             if process is not None:
                 # The freshly created session belongs to this context, even if its leader exits.
                 with contextlib.suppress(ProcessLookupError):
-                    os.killpg(process.pid, signal.SIGTERM)
+                    os.killpg(process.pid, shutdown_signal)
                 deadline = time.monotonic() + base["server"].get("shutdown_timeout_seconds", 30)
                 while time.monotonic() < deadline:
                     process.poll()
@@ -253,6 +257,8 @@ def request_record(url, model, job, origin_wall, origin_mono, timeout, seed):
         "workload": job["workload"],
         "scheduled_at": origin_wall + job["offset"],
         "started_at": origin_wall + started - origin_mono,
+        "scheduled_mono_ns": int(due * 1e9),
+        "started_mono_ns": int(started * 1e9),
         "arrival_lag_ms": (started - due) * 1000,
         "prompt_tokens": len(job["prompt_ids"]),
         "output_tokens": job["output_tokens"],
@@ -305,6 +311,8 @@ def request_record(url, model, job, origin_wall, origin_mono, timeout, seed):
     end = time.monotonic()
     record.update(
         completed_at=origin_wall + end - origin_mono,
+        completed_mono_ns=int(end * 1e9),
+        first_content_mono_ns=None if first is None else int(first * 1e9),
         first_content_at=None if first is None else origin_wall + first - origin_mono,
         last_content_at=None if last_content is None else origin_wall + last_content - origin_mono,
         ttft_ms=None if first is None else (first - due) * 1000,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import difflib
 import subprocess
 from pathlib import Path
@@ -15,6 +16,24 @@ def replace_once(text, before, after):
     if text.count(before) != 1:
         raise ValueError(f"source anchor is not unique: {before[:90]!r}")
     return text.replace(before, after, 1)
+
+
+def insert_import(source, statement):
+    """Preserve module docstrings and Python's mandatory future-import ordering."""
+    tree = ast.parse(source)
+    index = 0
+    for node in tree.body:
+        if (isinstance(node, ast.ImportFrom) and node.module == "__future__") or (
+            isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
+            index = node.end_lineno
+        else:
+            index = max(index, node.lineno - 1)
+            break
+    lines = source.splitlines(True)
+    lines.insert(index, statement.rstrip("\n") + "\n")
+    return "".join(lines)
 
 
 def patch_text(before, after):
@@ -57,13 +76,9 @@ def build(checkout, output):
     }
     week7 = dict(original)
     for name in names:
-        # Insert after the license comments, before regular imports.
-        lines = week7[name].splitlines(True)
-        index = next(i for i, line in enumerate(lines) if line.startswith(("import ", "from ")))
-        lines.insert(
-            index, "from vllm._study_trace import emit as study_emit, enabled as study_enabled\n"
+        week7[name] = insert_import(
+            week7[name], "from vllm._study_trace import emit as study_emit, enabled as study_enabled"
         )
-        week7[name] = "".join(lines)
     week7["vllm/_study_trace.py"] = Path("scripts/trace_payload.py").read_text()
     api, async_llm, core, scheduler = names
     week7[api] = replace_once(
@@ -181,6 +196,9 @@ def build(checkout, output):
         "                                prompt_tokens=self.requests[rid].num_prompt_tokens)\n"
         "                           for rid, count in num_scheduled_tokens.items()])\n\n" + anchor,
     )
+    for stage in (week7, week8):
+        for name, content in stage.items():
+            compile(content, name, "exec")
     output.mkdir(parents=True, exist_ok=True)
     write_text(output / "week07-request-trace.patch", patch_text(original, week7))
     write_text(output / "week08-scheduler-trace.patch", patch_text(week7, week8))

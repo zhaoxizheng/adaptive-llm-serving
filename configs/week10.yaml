@@ -1,0 +1,15 @@
+schema_version: 1
+week: 10
+week07_config: configs/week07.yaml
+workload_config: configs/profiling-workloads.yaml
+output_root: results/week10
+timeout_seconds: 180
+seed: 42
+event_limit: 100000
+server_overrides: {enable_prefix_caching: false}
+scenarios:
+  prefill: {workload: short_prefill}
+  decode: {workload: decode}
+  mixed: {workload: mixed}
+  eager: {workload: decode, overrides: {enforce_eager: true}}
+  graph: {workload: decode, overrides: {enforce_eager: false}}

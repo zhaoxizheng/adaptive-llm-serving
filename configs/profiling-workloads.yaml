@@ -1,0 +1,17 @@
+schema_version: 1
+# Arrival offsets are measured from the start of each workload, in milliseconds.
+workloads:
+  short_prefill:
+    requests:
+      - {request_id: short, arrival_ms: 0, prompt_tokens: 128, output_tokens: 1}
+  long_prefill:
+    requests:
+      - {request_id: long, arrival_ms: 0, prompt_tokens: 2048, output_tokens: 1}
+  decode:
+    requests:
+      - {request_id: decode, arrival_ms: 0, prompt_tokens: 128, output_tokens: 256}
+  mixed:
+    overrides: {enable_chunked_prefill: true, max_num_batched_tokens: 256}
+    requests:
+      - {request_id: decode, arrival_ms: 0, prompt_tokens: 128, output_tokens: 256}
+      - {request_id: long, arrival_ms: 100, prompt_tokens: 2048, output_tokens: 32}

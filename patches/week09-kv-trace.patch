@@ -1,0 +1,290 @@
+diff --git a/vllm/_study_kv.py b/vllm/_study_kv.py
+new file mode 100644
+--- /dev/null
++++ b/vllm/_study_kv.py
+@@ -0,0 +1,148 @@
++"""Copied to vllm/_study_kv.py; inactive unless VLLM_KV_TRACE_DIR is set."""
++
++import contextvars
++import functools
++import hashlib
++import json
++import os
++import threading
++import time
++from pathlib import Path
++
++_REQUEST = contextvars.ContextVar("kv_request", default=None)
++_STEP = -1
++_COUNT = 0
++
++
++def enabled():
++    return bool(os.environ.get("VLLM_KV_TRACE_DIR"))
++
++
++def emit(event, **fields):
++    global _COUNT
++    if not enabled():
++        return
++    limit = int(os.environ.get("VLLM_KV_TRACE_LIMIT", "100000"))
++    if _COUNT > limit:
++        return
++    if _COUNT == limit:
++        event, fields = "trace_truncated", {}
++    record = dict(
++        schema_version=1,
++        component="kv",
++        event=event,
++        ts_ns=time.monotonic_ns(),
++        pid=os.getpid(),
++        thread=threading.get_ident(),
++        request_id=_REQUEST.get(),
++        step=_STEP,
++        **fields,
++    )
++    root = Path(os.environ["VLLM_KV_TRACE_DIR"])
++    root.mkdir(parents=True, exist_ok=True)
++    with (root / f"kv-{os.getpid()}.jsonl").open("a") as handle:
++        handle.write(json.dumps(record, allow_nan=False) + "\n")
++    _COUNT += 1
++
++
++def scheduler_step():
++    global _STEP
++    if enabled():
++        _STEP += 1
++
++
++def snapshot(pool, blocks):
++    result = []
++    for block in blocks:
++        if block.is_null:
++            continue
++        key = block.block_hash
++        result.append(
++            dict(
++                block_id=block.block_id,
++                ref_count=block.ref_cnt,
++                hash_tag=(
++                    None if key is None else hashlib.sha256(repr(key).encode()).hexdigest()[:16]
++                ),
++                mapped=key is not None
++                and pool.cached_block_hash_to_block.get(key, {}).get(block.block_id) is block,
++            )
++        )
++    return result
++
++
++def pool_event(pool, event, blocks):
++    if enabled():
++        emit(event, blocks=snapshot(pool, blocks), free_blocks=pool.get_num_free_blocks())
++
++
++def pool_init(pool):
++    if enabled():
++        emit(
++            "pool_init",
++            capacity=pool.num_gpu_blocks,
++            null_block=pool.null_block.block_id,
++            free_blocks=pool.get_num_free_blocks(),
++        )
++
++
++def evict(pool, block, old_hash):
++    if enabled():
++        emit(
++            "evict",
++            blocks=snapshot(pool, [block]),
++            old_mapping_present=block.block_id in pool.cached_block_hash_to_block.get(old_hash, {}),
++        )
++
++
++def lookup(pool, blocks):
++    if enabled():
++        emit("lookup", blocks=snapshot(pool, blocks or []), hit=blocks is not None)
++
++
++def manager_call(method):
++    """Observe manager boundaries without changing arguments or return values."""
++
++    @functools.wraps(method)
++    def wrapped(self, request, *args, **kwargs):
++        if not enabled():
++            return method(self, request, *args, **kwargs)
++        token = _REQUEST.set(request.request_id)
++        try:
++            if self.num_kv_cache_groups != 1:
++                raise ValueError("Week 9 trace requires one full-attention KV group")
++            size = self.kv_cache_config.kv_cache_groups[0].kv_cache_spec.block_size
++            before = self.block_pool.get_num_free_blocks()
++            result = method(self, request, *args, **kwargs)
++            kind = method.__name__
++            if kind == "get_computed_blocks":
++                blocks, count = result
++                emit(
++                    "computed",
++                    block_ids=blocks.get_block_ids()[0],
++                    cached_tokens=count,
++                    prompt_tokens=request.num_prompt_tokens,
++                    block_size=size,
++                )
++            else:
++                ids = [] if kind == "free" else self.get_block_ids(request.request_id)[0]
++                emit(
++                    "request_table",
++                    operation=kind,
++                    block_ids=ids,
++                    block_size=size,
++                    requested_tokens=(args[0] if args else kwargs.get("num_new_tokens", 0)),
++                    computed_tokens=request.num_computed_tokens,
++                    cached_tokens=(
++                        args[1] if len(args) > 1 else kwargs.get("num_new_computed_tokens", 0)
++                    ),
++                    allocation_succeeded=kind != "allocate_slots" or result is not None,
++                    free_blocks_before=before,
++                    free_blocks_after=self.block_pool.get_num_free_blocks(),
++                    finish_reason=request.status.name,
++                )
++            return result
++        finally:
++            _REQUEST.reset(token)
++
++    return wrapped
+diff --git a/vllm/v1/core/block_pool.py b/vllm/v1/core/block_pool.py
+--- a/vllm/v1/core/block_pool.py
++++ b/vllm/v1/core/block_pool.py
+@@ -1,5 +1,6 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++from vllm import _study_kv as study_kv
+ from collections import defaultdict
+ from collections.abc import Iterable
+ from typing import Optional
+@@ -71,6 +72,7 @@
+ 
+         self.enable_kv_cache_events = enable_kv_cache_events
+         self.kv_event_queue: list[KVCacheEvent] = []
++        study_kv.pool_init(self)
+ 
+     def get_cached_block(
+             self, block_hash: BlockHash,
+@@ -93,9 +95,11 @@
+             cached_blocks_one_group = self.cached_block_hash_to_block.get(
+                 block_hash_with_group_id)
+             if not cached_blocks_one_group:
++                study_kv.lookup(self, None)
+                 return None
+             first_block = next(iter(cached_blocks_one_group.values()))
+             cached_blocks.append(first_block)
++        study_kv.lookup(self, cached_blocks)
+         return cached_blocks
+ 
+     def cache_full_blocks(
+@@ -145,6 +149,8 @@
+             if new_hashes is not None:
+                 new_hashes.append(maybe_convert_block_hash(block_hash))
+ 
++        study_kv.pool_event(self, 'cache', new_full_blocks)
++
+         if self.enable_kv_cache_events:
+             if num_cached_blocks == 0:
+                 parent_block_hash: Optional[ExternalBlockHash] = None
+@@ -194,6 +200,7 @@
+             for block in ret:
+                 assert block.ref_cnt == 0
+                 block.ref_cnt += 1
++        study_kv.pool_event(self, 'allocate', ret)
+         return ret
+ 
+     def _maybe_evict_cached_block(self, block: KVCacheBlock) -> bool:
+@@ -231,6 +238,7 @@
+                     maybe_convert_block_hash(get_block_hash(block_hash))
+                 ],
+                              medium=MEDIUM_GPU))
++        study_kv.evict(self, block, block_hash)
+         return True
+ 
+     def touch(self, blocks: tuple[list[KVCacheBlock], ...]) -> None:
+@@ -248,6 +256,10 @@
+                 if block.ref_cnt == 0 and not block.is_null:
+                     self.free_block_queue.remove(block)
+                 block.ref_cnt += 1
++
++        if study_kv.enabled():
++            study_kv.pool_event(self, 'touch',
++                                [b for group in blocks for b in group])
+ 
+     def free_blocks(self, ordered_blocks: Iterable[KVCacheBlock]) -> None:
+         """Free a list of blocks. The blocks should be ordered by their
+@@ -266,6 +278,8 @@
+             if block.ref_cnt == 0 and not block.is_null
+         ])
+ 
++        study_kv.pool_event(self, 'release', blocks_list)
++
+     def reset_prefix_cache(self) -> bool:
+         """Reset prefix cache. This function may be used in RLHF
+         flows to invalid prefix caching after the weights are updated,
+diff --git a/vllm/v1/core/kv_cache_manager.py b/vllm/v1/core/kv_cache_manager.py
+--- a/vllm/v1/core/kv_cache_manager.py
++++ b/vllm/v1/core/kv_cache_manager.py
+@@ -1,6 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+ 
++from vllm import _study_kv as study_kv
+ from dataclasses import dataclass
+ from typing import Literal, Optional, overload
+ 
+@@ -150,6 +151,7 @@
+         self.prefix_cache_stats = PrefixCacheStats()
+         return stats
+ 
++    @study_kv.manager_call
+     def get_computed_blocks(self,
+                             request: Request) -> tuple[KVCacheBlocks, int]:
+         """Get the computed (cached) blocks for the request.
+@@ -189,6 +191,7 @@
+ 
+         return KVCacheBlocks(computed_blocks), num_new_computed_tokens
+ 
++    @study_kv.manager_call
+     def allocate_slots(
+         self,
+         request: Request,
+@@ -302,6 +305,7 @@
+ 
+         return KVCacheBlocks(new_blocks)
+ 
++    @study_kv.manager_call
+     def free(self, request: Request) -> None:
+         """Free the blocks allocated for the request.
+         We free the blocks in reverse order so that the tail blocks are evicted
+@@ -387,6 +391,7 @@
+         """Get the block ids of a request."""
+         return self.get_blocks(request_id).get_block_ids()
+ 
++    @study_kv.manager_call
+     def cache_blocks(self, request: Request, num_computed_tokens: int) -> None:
+         """Cache the blocks for the request, if enabled."""
+         if self.enable_caching:
+diff --git a/vllm/v1/core/sched/scheduler.py b/vllm/v1/core/sched/scheduler.py
+--- a/vllm/v1/core/sched/scheduler.py
++++ b/vllm/v1/core/sched/scheduler.py
+@@ -3,6 +3,7 @@
+ 
+ from __future__ import annotations
+ 
++from vllm import _study_kv as study_kv
+ from vllm._study_trace import emit as study_emit, enabled as study_enabled
+ import itertools
+ import time
+@@ -192,6 +193,7 @@
+             study_running_before = len(self.running)
+             study_waiting_before = len(self.waiting)
+ 
++        study_kv.scheduler_step()
+         scheduled_new_reqs: list[Request] = []
+         scheduled_resumed_reqs: list[Request] = []
+         scheduled_running_reqs: list[Request] = []

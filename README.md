@@ -35,10 +35,10 @@ weekly execution plans and reading lists:
 - [Week 6 execution plan](docs/week-06-plan.md), [references](docs/week-06-references.md), and [Chinese code walkthrough](docs/week-06-code-walkthrough.md)
 - [Week 7 execution plan](docs/week-07-plan.md), [references](docs/week-07-references.md), and [Chinese code walkthrough](docs/week-07-code-walkthrough.md)
 - [Week 8 execution plan](docs/week-08-plan.md), [references](docs/week-08-references.md), and [Chinese code walkthrough](docs/week-08-code-walkthrough.md)
-- [Week 9 execution plan](docs/week-09-plan.md) and [references](docs/week-09-references.md)
-- [Week 10 execution plan](docs/week-10-plan.md) and [references](docs/week-10-references.md)
-- [Week 11 execution plan](docs/week-11-plan.md) and [references](docs/week-11-references.md)
-- [Week 12 execution plan](docs/week-12-plan.md) and [references](docs/week-12-references.md)
+- [Week 9 execution plan](docs/week-09-plan.md), [references](docs/week-09-references.md), and [Chinese code walkthrough](docs/week-09-code-walkthrough.md)
+- [Week 10 execution plan](docs/week-10-plan.md), [references](docs/week-10-references.md), and [Chinese code walkthrough](docs/week-10-code-walkthrough.md)
+- [Week 11 execution plan](docs/week-11-plan.md), [references](docs/week-11-references.md), and [Chinese code walkthrough](docs/week-11-code-walkthrough.md)
+- [Week 12 execution plan](docs/week-12-plan.md), [references](docs/week-12-references.md), and [Chinese code walkthrough](docs/week-12-code-walkthrough.md)
 - [Week 13 execution plan](docs/week-13-plan.md) and [references](docs/week-13-references.md)
 - [Week 14 execution plan](docs/week-14-plan.md) and [references](docs/week-14-references.md)
 - [Week 15 execution plan](docs/week-15-plan.md) and [references](docs/week-15-references.md)
@@ -261,6 +261,31 @@ to the Mac. Raw runs are stored under `results/week05/raw/sessions/` and
 `results/week06/raw/sessions/`; source-study evidence is under each week's `traces/`.
 New sessions retain failures without overwriting earlier evidence. Archive failed
 or duplicate sessions before selecting a complete experiment for comparison.
+
+## Weeks 9–12 Internals and Profiling
+
+Weeks 9–12 include deterministic KV lifecycle scenarios, scheduler-to-runner shape
+traces, paired PyTorch Profiler captures, and Nsight Systems capture/export tooling.
+Each week has a Chinese code walkthrough and an unfilled experiment report. Follow
+the [shared runbook](docs/week-09-12-runbook.md) for source patch order and prerequisites.
+
+```bash
+# CPU-only: validate configuration and inspect commands.
+make plan-week09 plan-week10 plan-week11 plan-week12 PYTHON=python3.12
+
+# Prepared L4 VM: apply the required patches before running each week.
+make run-week09
+make run-week10
+make run-week11
+make run-week12
+```
+
+The runners reuse the Week 6 operating point and pinned vLLM source. Week 12 also
+requires an existing Nsight Systems CLI. CUDA experiments have not been executed
+by generating this code. Offline parsers and synthetic CPU tests validate evidence
+contracts; real cache reuse, graph replay, profiler overhead, and GPU gaps require
+the saved VM runs. Each run preserves a unique session, failure state, raw evidence,
+and an explicit `observed` or `not_observed` mechanism result.
 
 ## Experiment Contract
 
