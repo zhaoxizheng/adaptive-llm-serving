@@ -29,6 +29,7 @@ from src.week03_contract import (
     EVENT_FIELDS,
     case_id as week03_case_id,
     expand_matrix as expand_week03_matrix,
+    measurement_window,
     validate_event_rows,
     validate_run_metadata as validate_week03_run_metadata,
 )
@@ -527,18 +528,30 @@ def summarize_records(
     records: Sequence[Mapping[str, object]],
     *,
     max_p99_arrival_lag_ms: float,
+    measurement_start_ns: int,
+    measurement_end_ns: int,
 ) -> dict[str, object]:
     """Summarize only measurement-window requests while retaining warm-up totals."""
 
+    if not 0 <= measurement_start_ns < measurement_end_ns:
+        raise ValueError("invalid declared measurement window")
+    for record in records:
+        scheduled_ns = int(record["scheduled_arrival_ns"])
+        expected_measurement = measurement_start_ns <= scheduled_ns < measurement_end_ns
+        if (
+            not 0 <= scheduled_ns < measurement_end_ns
+            or record.get("measurement") is not expected_measurement
+        ):
+            raise ValueError("trace measurement flag differs from declared window")
     measurement = [record for record in records if record.get("measurement") is True]
     if not measurement:
         raise ValueError("trace replay has no measurement-window records")
     completed = [
         record for record in measurement if record.get("status") == "completed"
     ]
-    scheduled = [int(record["scheduled_arrival_ns"]) for record in measurement]
     terminal = [int(record["terminal_ns"]) for record in measurement]
-    elapsed_ns = max(1, max(terminal) - min(scheduled))
+    elapsed_ns = measurement_end_ns - measurement_start_ns
+    drain_ns = max(measurement_end_ns, max(terminal)) - measurement_start_ns
     ttft = [
         float(record["ttft_ms"])
         for record in completed
@@ -576,6 +589,8 @@ def summarize_records(
         },
         "metrics": {
             "duration_seconds": duration_seconds,
+            "drain_duration_seconds": drain_ns / NANOSECONDS_PER_SECOND,
+            "drain_inclusive_throughput_rps": len(completed) / (drain_ns / NANOSECONDS_PER_SECOND),
             "request_throughput": len(completed) / duration_seconds,
             "output_token_throughput": actual_output / duration_seconds,
             "p50_ttft_ms": _nearest_rank(ttft, 0.50),
@@ -743,7 +758,16 @@ def execute_trace(
         item.request_id for item in trace
     ]:
         raise RuntimeError("trace replay did not preserve every request row in order")
-    summary = summarize_records(records, max_p99_arrival_lag_ms=lag_limit)
+    comparison = _comparison_config(validated)
+    start, end = measurement_window(
+        load_yaml(str(comparison["week03_config"])), str(comparison["profile"])
+    )
+    summary = summarize_records(
+        records,
+        max_p99_arrival_lag_ms=lag_limit,
+        measurement_start_ns=start,
+        measurement_end_ns=end,
+    )
     bound_identity = artifact_identity(metadata)
     source_identity = _mapping(metadata.get("source"), "metadata.source")
     model_identity = _mapping(metadata.get("model_identity"), "metadata.model_identity")
@@ -756,7 +780,7 @@ def execute_trace(
     assert isinstance(tokens, Mapping)
     return {
         "schema_version": SCHEMA_VERSION,
-        "adapter": {"name": "week03-trace-replay", "version": "1.0"},
+        "adapter": {"name": "week03-trace-replay", "version": "2.0"},
         "captured_at": utc_now(),
         **bound_identity,
         "server_instance_id": server_id,
@@ -788,6 +812,8 @@ def execute_trace(
             "trace_file_sha256": trace_sha256,
             "warmup_requests": summary["warmup_requests"]["requested"],
             "measurement_requests": measurement_counts["requested"],
+            "measurement_start_ns": start,
+            "measurement_end_ns": end,
         },
         "counts": dict(measurement_counts),
         "tokens": {
@@ -1106,6 +1132,7 @@ def configured_replay_cases(
         raise ValueError("Week 3 events do not cover the exact primary trace matrix")
 
     cases: list[dict[str, object]] = []
+    start, end = measurement_window(week03_config, str(comparison["profile"]))
     for trace_id, candidate in grouped.items():
         trace_entry = inventory.get(trace_id)
         if trace_entry is None:
@@ -1136,6 +1163,8 @@ def configured_replay_cases(
                 **candidate,
                 "trace_path": str(path),
                 "trace_file_sha256": digest,
+                "measurement_start_ns": start,
+                "measurement_end_ns": end,
             }
         )
 
@@ -1182,6 +1211,9 @@ def _validate_reusable_replay(
         raise ValueError("existing trace replay artifact differs for request_rate")
     if int(replay_case.get("repeat", -1)) != int(case["repeat"]):
         raise ValueError("existing trace replay artifact differs for repeat")
+    for field in ("measurement_start_ns", "measurement_end_ns"):
+        if replay_case.get(field) != case[field]:
+            raise ValueError(f"existing trace replay artifact differs for {field}")
     if int(execution.get("max_workers", 0)) != max_workers:
         raise ValueError("existing trace replay artifact differs for max_workers")
     records = result.get("records")
@@ -1216,7 +1248,12 @@ def _validate_reusable_replay(
     lag_limit = _positive_float(
         gate.get("max_p99_arrival_lag_ms"), "arrival lag gate limit"
     )
-    summary = summarize_records(records, max_p99_arrival_lag_ms=lag_limit)
+    summary = summarize_records(
+        records,
+        max_p99_arrival_lag_ms=lag_limit,
+        measurement_start_ns=int(case["measurement_start_ns"]),
+        measurement_end_ns=int(case["measurement_end_ns"]),
+    )
     if result.get("counts") != summary["measurement_requests"]:
         raise ValueError("existing trace replay aggregate counts are inconsistent")
     if result.get("metrics") != summary["metrics"]:

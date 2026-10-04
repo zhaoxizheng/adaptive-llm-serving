@@ -7,7 +7,6 @@ import math
 import re
 from copy import deepcopy
 from dataclasses import asdict, dataclass
-from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from src.common import load_yaml, stable_fingerprint
@@ -115,6 +114,8 @@ def validate_config(config: Mapping[str, object]) -> dict[str, Any]:
         raise ValueError("server.gpu_memory_utilization must be <= 1")
     _positive_int(server.get("max_num_seqs"), "server.max_num_seqs")
     _positive_int(server.get("max_num_batched_tokens"), "server.max_num_batched_tokens")
+    if not isinstance(server.get("enable_prefix_caching"), bool):
+        raise ValueError("server.enable_prefix_caching must be a boolean")
     for key in (
         "startup_timeout_seconds",
         "readiness_poll_seconds",
@@ -351,8 +352,11 @@ def server_argv(config: Mapping[str, object], executable: str = "vllm") -> list[
         "--max-num-batched-tokens",
         str(server["max_num_batched_tokens"]),
     ]
-    if bool(server.get("enable_prefix_caching")):
-        argv.append("--enable-prefix-caching")
+    argv.append(
+        "--enable-prefix-caching"
+        if server["enable_prefix_caching"]
+        else "--no-enable-prefix-caching"
+    )
     return argv
 
 

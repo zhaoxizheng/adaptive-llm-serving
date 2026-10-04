@@ -159,6 +159,26 @@ def test_validate_help_support_fails_before_unsupported_flags_run() -> None:
         validate_help_support(["vllm", "serve", "m", "--new-flag", "x"], "--host")
 
 
+@pytest.mark.parametrize("enabled", [True, False])
+def test_prefix_caching_does_not_inherit_engine_defaults(enabled: bool) -> None:
+    config = make_config()
+    config["server"]["enable_prefix_caching"] = enabled
+    flags = set(server_argv(config))
+    expected = "--enable-prefix-caching" if enabled else "--no-enable-prefix-caching"
+    opposite = "--no-enable-prefix-caching" if enabled else "--enable-prefix-caching"
+    assert expected in flags
+    assert opposite not in flags
+    with pytest.raises(ValueError, match=expected):
+        validate_help_support(["vllm", "serve", "m", expected], "--host")
+
+
+def test_prefix_caching_rejects_a_string_boolean() -> None:
+    config = make_config()
+    config["server"]["enable_prefix_caching"] = "false"
+    with pytest.raises(ValueError, match="must be a boolean"):
+        validate_config(config)
+
+
 @pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "::1", "[::1]"])
 def test_loopback_hosts(host: str) -> None:
     assert is_loopback_host(host)

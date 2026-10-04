@@ -118,7 +118,9 @@ def test_generates_the_four_named_plots(tmp_path) -> None:
         all_events.extend(events)
         summaries.append(summarize_case(events, batches, metadata=_))
 
-    outputs = write_figures(summaries, all_events, tmp_path)
+    outputs = write_figures(
+        summaries, all_events, tmp_path, config=load_yaml("configs/week03.yaml")
+    )
 
     assert tuple(path.name for path in outputs) == FIGURE_NAMES
     assert all(path.is_file() and path.stat().st_size > 0 for path in outputs)
@@ -248,7 +250,7 @@ def test_figures_reject_all_null_ttft_series(tmp_path) -> None:
         summary[field] = None
 
     with pytest.raises(ValueError, match="no completed TTFT samples"):
-        write_figures([summary], events, tmp_path)
+        write_figures([summary], events, tmp_path, config=load_yaml("configs/week03.yaml"))
 
 
 def _write_csv(path, rows, fields) -> None:
@@ -292,7 +294,7 @@ def test_analyze_uses_artifact_root_and_writes_reproducible_outputs(
     _write_csv(batches_path, batches, BATCH_FIELDS)
     write_json(root / "raw" / "run_metadata.json", metadata)
 
-    def fake_figures(summaries, raw_events, output_dir):
+    def fake_figures(summaries, raw_events, output_dir, *, config):
         del summaries, raw_events
         return tuple(output_dir / name for name in FIGURE_NAMES)
 

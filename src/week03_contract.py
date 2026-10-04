@@ -180,6 +180,28 @@ def config_fingerprint(config: Mapping[str, object]) -> str:
     return stable_fingerprint(scientific_config(config))
 
 
+def measurement_window(config: Mapping[str, object], profile: str) -> tuple[int, int]:
+    """Return the declared post-warmup interval in case-relative nanoseconds."""
+
+    workload = _mapping(config["workload"], "workload")
+    section = _mapping(_mapping(config["matrix"], "matrix")[profile], profile)
+    duration = float(section.get("duration_seconds", workload["duration_seconds"]))
+    warmup = float(section.get("warmup_seconds", workload["warmup_seconds"]))
+    if not math.isfinite(duration) or not math.isfinite(warmup) or not 0 <= warmup < duration:
+        raise ValueError("invalid measurement window")
+    start, end = round(warmup * 1e9), round(duration * 1e9)
+    if end <= start:
+        raise ValueError("measurement window must span at least one nanosecond")
+    return start, end
+
+
+def is_baseline_case(row: Mapping[str, object], config: Mapping[str, object]) -> bool:
+    """Keep parameter sweeps out of fixed-policy load and framework comparisons."""
+
+    size, delay = _policy_defaults(_mapping(config["matrix"], "matrix"), str(row["policy"]))
+    return int(row["max_batch_size"]) == size and int(row["delay_ms"]) == delay
+
+
 def _policy_defaults(matrix: Mapping[str, object], policy: str) -> tuple[int, int]:
     defaults = _mapping(matrix.get("policy_defaults"), "matrix.policy_defaults")
     value = _mapping(defaults.get(policy), f"matrix.policy_defaults.{policy}")

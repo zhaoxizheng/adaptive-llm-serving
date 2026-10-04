@@ -147,7 +147,7 @@ batch_fill_ratio  = actual_batch_size / max_batch_size
 - 各 batch size 的 observed requests/s
 - 不发生持续排队时的近似可服务速率
 
-正式运行前，必须运行 `make calibrate-week03`。它验证完整 Week 2 raw rows、metadata、model/runtime/source identity，从 `prompt=256, output=64` 的 batch-size sweep 构建 `results/week03/calibration.json`；正式 runner 只接受该 artifact，并用 batch 1 completed repeats 的 median requests/s 计算 offered load。`fake` backend 使用配置中的 synthetic capacity，但只能产生 simulation evidence。
+正式运行需要通过校准。`make run-week03` 在确定输出路径后自动生成 calibration，也可用 `make calibrate-week03` 单独检查。校准验证完整 Week 2 raw rows、metadata、model/runtime/source identity，从 `prompt=256, output=64` 的 batch-size sweep 构建 artifact；以 batch 1 completed repeats 的 E2E latency 重算 requests/s，再取 median 计算 offered load。`make smoke-week03` 将新 calibration 和环境证据写入 smoke 根目录；正式运行写入 `results/week03/calibration.json`。`fake` backend 使用配置中的 synthetic capacity，但只能产生 simulation evidence。
 
 ### 主实验：固定请求 shape
 

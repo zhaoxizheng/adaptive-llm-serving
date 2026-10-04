@@ -16,6 +16,7 @@ import pandas as pd
 from src.common import write_json
 from src.vllm_contract import server_argv, validate_config
 from src.vllm_result_adapter import is_normalized_vllm_result, load_vllm_result
+from src.week03_contract import is_baseline_case, measurement_window
 from src.week04_contract import artifact_identity, load_run_metadata, sha256_file
 
 FIGURE_NAMES = (
@@ -105,6 +106,13 @@ def load_week03_records(
             rows = list(csv.DictReader(handle))
         if not rows:
             raise ValueError("Week 3 comparison CSV is empty")
+        rows = [
+            row for row in rows if row["profile"] == "primary" and is_baseline_case(row, config)
+        ]
+        start, end = measurement_window(config, "primary")
+        for row in rows:
+            if (int(row["measurement_start_ns"]), int(row["measurement_end_ns"])) != (start, end):
+                raise ValueError("Week 3 summary measurement window differs from config")
         return [
             {
                 "schema_version": 1,
@@ -122,6 +130,11 @@ def load_week03_records(
                     "repeat": int(row["repeat"]),
                     "trace_id": row.get("trace_id"),
                     "policy": row.get("policy"),
+                    "max_batch_size": int(row["max_batch_size"]),
+                    "delay_ms": int(row["delay_ms"]),
+                    "case_id": row["case_id"],
+                    "measurement_start_ns": start,
+                    "measurement_end_ns": end,
                 },
                 "counts": {
                     "requested": int(row["attempted"]),
@@ -132,6 +145,9 @@ def load_week03_records(
                 "tokens": {},
                 "metrics": {
                     "request_throughput": float(row["achieved_throughput_rps"]),
+                    "duration_seconds": float(row["measurement_duration_seconds"]),
+                    "drain_duration_seconds": float(row["drain_duration_seconds"]),
+                    "drain_inclusive_throughput_rps": float(row["drain_inclusive_throughput_rps"]),
                     "p99_ttft_ms": float(row["p99_ttft_ms"]),
                     "server_queue_ms": None,
                 },
@@ -223,6 +239,26 @@ def validate_week03_week04_comparison(
                     )
             if "p99_ttft_ms" not in metrics or "request_throughput" not in metrics:
                 raise ValueError(f"{week} balanced record lacks comparison metrics")
+            start, end = case.get("measurement_start_ns"), case.get("measurement_end_ns")
+            if (
+                isinstance(start, bool)
+                or not isinstance(start, int)
+                or isinstance(end, bool)
+                or not isinstance(end, int)
+                or not 0 <= start < end
+            ):
+                raise ValueError(f"{week} lacks a valid declared measurement window")
+            duration = (end - start) / 1e9
+            if metrics.get("duration_seconds") != duration:
+                raise ValueError(f"{week} throughput duration differs from measurement window")
+            counts = record.get("counts", {})
+            success = counts.get("success")
+            if not isinstance(success, int) or isinstance(success, bool) or success < 0:
+                raise ValueError(f"{week} lacks a valid completed request count")
+            if not math.isclose(float(metrics["request_throughput"]), success / duration):
+                raise ValueError(
+                    f"{week} throughput differs from completed count / measurement window"
+                )
         return sorted(
             selected,
             key=lambda record: (
@@ -277,6 +313,13 @@ def validate_week03_week04_comparison(
             "Week 3/4 open-loop trace_id/request_rate cells differ: "
             f"missing_in_week04={missing}, extra_in_week04={extra}"
         )
+    windows: dict[tuple[str, float], tuple[int, int]] = {}
+    for record in [*left, *right]:
+        case = record["case"]
+        cell = (str(case["trace_id"]), float(case["request_rate"]))
+        window = (case["measurement_start_ns"], case["measurement_end_ns"])
+        if windows.setdefault(cell, window) != window:
+            raise ValueError("Week 3/4 declared measurement windows differ")
     return left, right
 
 
@@ -500,7 +543,31 @@ def build_analysis_summary(
             str(row["case_id"]),
         ),
     )
-    passing = [row for row in rows if row["slo_pass"] is True]
+    by_rate: dict[float, list[dict[str, object]]] = {}
+    for row in rows:
+        by_rate.setdefault(float(row["request_rate_rps"]), []).append(row)
+    groups = []
+    passing = []
+    expected_repeats = set(range(int(benchmark["repeats"])))
+    for rate, repeats in sorted(by_rate.items()):
+        repeat_ids = [int(row["repeat"]) for row in repeats]
+        if len(repeat_ids) != len(set(repeat_ids)):
+            raise ValueError(f"duplicate repeat for open-loop rate {rate}")
+        complete = set(repeat_ids) == expected_repeats
+        passed = complete and all(row["slo_pass"] is True for row in repeats)
+        group = {
+            "request_rate_rps": rate,
+            "repeat_ids": sorted(repeat_ids),
+            "complete_repeat_set": complete,
+            "all_repeats_passed": passed,
+            "case_ids": [row["case_id"] for row in repeats],
+        }
+        groups.append(group)
+        if passed:
+            # Keep a concrete evidence row for the report, using the worst TTFT
+            # repeat instead of presenting the most favorable sample.
+            representative = max(repeats, key=lambda row: (row["p99_ttft_ms"], row["p99_tpot_ms"]))
+            passing.append({**representative, "repeat_validation": group})
     selected = (
         max(
             passing,
@@ -537,12 +604,8 @@ def build_analysis_summary(
         "status": "completed",
         "run_id": run_ids[0] if len(run_ids) == 1 else None,
         "run_ids": run_ids,
-        "server_instance_id": (
-            server_instance_ids[0] if len(server_instance_ids) == 1 else None
-        ),
-        "server_attempt_id": (
-            server_attempt_ids[0] if len(server_attempt_ids) == 1 else None
-        ),
+        "server_instance_id": (server_instance_ids[0] if len(server_instance_ids) == 1 else None),
+        "server_attempt_id": (server_attempt_ids[0] if len(server_attempt_ids) == 1 else None),
         "identity": {
             "model": validated["model"]["id"],
             "model_revision": validated["model"]["revision"],
@@ -556,6 +619,8 @@ def build_analysis_summary(
         },
         "open_loop_case_count": len(rows),
         "open_loop_results": rows,
+        "operating_point_rule": "all_configured_repeats_pass; representative=worst_ttft_repeat",
+        "operating_point_groups": groups,
         "selected_operating_point": selected,
         "server_argv_reference": {
             "source": "src.vllm_contract.server_argv",

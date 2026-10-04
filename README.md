@@ -211,10 +211,10 @@ make benchmark CONFIG=configs/week01.yaml PYTHON=.venv/bin/python
 
 Weeks 1–3 use `PYTHON` and the regular `.venv`; Week 4 deliberately uses
 `VLLM_PYTHON` and the separate `.venv-vllm`. The Week 3 fake simulation is a
-CPU semantics check, not performance evidence. Before `make run-week03`, provide
-the validated, measured batch-1 capacity artifact. The HF smoke and formal targets
-run `calibrate-week03` first and therefore require complete official Week 2 evidence
-from the same runtime. `make verify-week03` accepts only the canonical primary/HF run.
+CPU semantics check, not performance evidence. The HF smoke and formal targets require
+complete official Week 2 evidence from the same runtime. They resolve all output paths
+before generating calibration automatically; `make calibrate-week03` also remains
+available as a standalone check. `make verify-week03` accepts only the canonical primary/HF run.
 
 For Week 4, inspect the local plan, then bootstrap the dedicated environment and
 run the GPU phase on the VM:

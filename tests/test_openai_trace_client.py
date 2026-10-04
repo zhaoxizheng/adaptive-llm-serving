@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -45,6 +47,7 @@ def config(tmp_path):
     )
     comparison = value["benchmark"]["comparison"]
     week03 = trace_client.load_yaml("configs/week03.yaml")
+    week03["workload"].update(duration_seconds=0.003, warmup_seconds=0.001)
     comparison["base_prompt"] = week03["workload"]["prompt"]
     week03_config = tmp_path / "week03.yaml"
     week03_root = tmp_path / "week03"
@@ -269,6 +272,8 @@ def test_all_configured_manifest_and_records_keep_week04_identity(
         "trace_file_sha256": trace_client.sha256_file(path),
         "request_rate": 4.0,
         "repeat": 0,
+        "measurement_start_ns": 1_000_000,
+        "measurement_end_ns": 3_000_000,
     }
     monkeypatch.setattr(trace_client, "configured_replay_cases", lambda _config: [case])
 
@@ -293,6 +298,28 @@ def test_all_configured_manifest_and_records_keep_week04_identity(
     assert manifest["artifacts"][0]["sha256"] == trace_client.sha256_file(
         manifest["artifacts"][0]["path"]
     )
+    resumed = run_all_configured(
+        cfg,
+        metadata=metadata,
+        server_instance_id=SERVER_INSTANCE_ID,
+        server_attempt_id=SERVER_ATTEMPT_ID,
+        tokenizer=FakeTokenizer(),
+        stream_factory=lambda *_args: pytest.fail("completed replay should be reused"),
+    )
+    assert resumed["records"] == manifest["records"]
+    replay_path = Path(manifest["artifacts"][0]["path"])
+    tampered = json.loads(replay_path.read_text())
+    tampered["metrics"]["duration_seconds"] *= 2
+    replay_path.write_text(json.dumps(tampered))
+    with pytest.raises(ValueError, match="aggregate metrics are inconsistent"):
+        run_all_configured(
+            cfg,
+            metadata=metadata,
+            server_instance_id=SERVER_INSTANCE_ID,
+            server_attempt_id=SERVER_ATTEMPT_ID,
+            tokenizer=FakeTokenizer(),
+            stream_factory=lambda *_args: pytest.fail("invalid replay must not be rerun silently"),
+        )
     assert set(manifest["week03_inputs"]) == {
         "config",
         "run_metadata",

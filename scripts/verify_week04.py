@@ -23,6 +23,8 @@ from src.vllm_contract import (
     validate_config,
 )
 from src.vllm_result_adapter import load_vllm_result
+from src.openai_trace_client import summarize_records
+from src.week03_contract import measurement_window
 from src.workload import read_trace, trace_fingerprint
 from src.week04_contract import (
     artifact_identity,
@@ -380,6 +382,9 @@ def _verify_comparison_manifest(
             "comparison manifest case_count is not the configured replay count"
         )
     max_lag = float(config["benchmark"]["comparison"]["max_p99_arrival_lag_ms"])
+    start, end = measurement_window(
+        week03_metadata["scientific_config"], str(comparison_config["profile"])
+    )
     seen: set[tuple[str, int]] = set()
     trace_ids: set[str] = set()
     for index, record in enumerate(records):
@@ -393,6 +398,8 @@ def _verify_comparison_manifest(
         ):
             raise ValueError("comparison records mix server attempt identities")
         case = require_mapping(record.get("case"), f"comparison.records[{index}].case")
+        if (case.get("measurement_start_ns"), case.get("measurement_end_ns")) != (start, end):
+            raise ValueError("comparison replay measurement window differs from Week 3")
         if (
             case.get("mode") != "open-loop"
             or case.get("workload") != "balanced"
@@ -502,6 +509,17 @@ def _verify_comparison_manifest(
                     raise ValueError(
                         f"trace replay {case_id} row {request.ordinal} differs for {field}"
                     )
+        summary = summarize_records(
+            request_records,
+            max_p99_arrival_lag_ms=max_lag,
+            measurement_start_ns=start,
+            measurement_end_ns=end,
+        )
+        if (
+            replay.get("counts") != summary["measurement_requests"]
+            or replay.get("metrics") != summary["metrics"]
+        ):
+            raise ValueError(f"trace replay {case_id} summary differs from request evidence")
     record_case_ids = {str(record["case"].get("case_id", "")) for record in records}
     if artifact_case_ids != record_case_ids:
         raise ValueError("comparison artifacts and normalized record case IDs differ")
@@ -550,6 +568,8 @@ def _verify_analysis(
         "slo",
         "open_loop_case_count",
         "open_loop_results",
+        "operating_point_rule",
+        "operating_point_groups",
         "selected_operating_point",
         "server_argv_reference",
         "config_fingerprint",

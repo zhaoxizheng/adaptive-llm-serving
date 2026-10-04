@@ -29,11 +29,14 @@ def record(week: int, *, workload: str = "balanced") -> dict[str, object]:
             "concurrency": None,
             "repeat": 0,
             "trace_id": "trace-balanced-rate4-repeat0",
+            "measurement_start_ns": 20_000_000_000,
+            "measurement_end_ns": 120_000_000_000,
         },
         "counts": {"requested": 10, "success": 10, "timeout": 0, "error": 0},
         "tokens": {},
         "metrics": {
-            "request_throughput": 3.5 if week == 3 else 3.8,
+            "request_throughput": 0.1,
+            "duration_seconds": 100.0,
             "output_token_throughput": 224.0,
             "p99_ttft_ms": 30.0 if week == 3 else 20.0,
             "p99_tpot_ms": 4.0,
@@ -119,6 +122,7 @@ def test_generates_exact_required_figures_and_keeps_queue_separate(tmp_path) -> 
 
 def test_analysis_summary_selects_highest_slo_passing_open_loop_rate() -> None:
     config = load_yaml("configs/week04.yaml")
+    config["benchmark"]["repeats"] = 1
     low = record(4)
     low["case"]["case_id"] = "open-low"
     low["case"]["run_id"] = "run-1"
@@ -140,3 +144,38 @@ def test_analysis_summary_selects_highest_slo_passing_open_loop_rate() -> None:
     assert summary["server_attempt_id"] == (
         "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
     )
+
+
+def test_operating_point_requires_every_repeat_and_reports_worst_ttft() -> None:
+    config = load_yaml("configs/week04.yaml")
+    rows = []
+    for rate, ttfts in ((4.0, [30, 20, 40]), (8.0, [20, 2500, 2500])):
+        for repeat, ttft in enumerate(ttfts):
+            row = record(4)
+            row["case"].update(case_id=f"q{rate}-r{repeat}", request_rate=rate, repeat=repeat)
+            row["metrics"]["p99_ttft_ms"] = ttft
+            rows.append(row)
+    summary = build_analysis_summary(rows, config)
+    selected = summary["selected_operating_point"]
+    assert selected["request_rate_rps"] == 4.0
+    assert selected["p99_ttft_ms"] == 40
+    assert selected["repeat_validation"]["repeat_ids"] == [0, 1, 2]
+    assert summary["operating_point_groups"][1]["all_repeats_passed"] is False
+
+
+def test_incomplete_or_duplicate_repeats_cannot_establish_an_operating_point() -> None:
+    config = load_yaml("configs/week04.yaml")
+    assert build_analysis_summary([record(4)], config)["selected_operating_point"] is None
+    with pytest.raises(ValueError, match="duplicate repeat"):
+        build_analysis_summary([record(4), record(4)], config)
+
+
+def test_comparison_rejects_a_different_window_even_when_rates_match() -> None:
+    right = record(4)
+    right["case"].update(measurement_start_ns=0, measurement_end_ns=100_000_000_000)
+    with pytest.raises(ValueError, match="measurement windows differ"):
+        validate_week03_week04_comparison([record(3)], [right])
+    right = record(4)
+    right["metrics"]["request_throughput"] = 0.05
+    with pytest.raises(ValueError, match="throughput differs"):
+        validate_week03_week04_comparison([record(3)], [right])

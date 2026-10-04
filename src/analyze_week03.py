@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import math
 from collections import defaultdict
 from hashlib import sha256
 from pathlib import Path
@@ -17,6 +18,8 @@ from src.week03_contract import (
     BATCH_FIELDS,
     EVENT_FIELDS,
     SCHEMA_VERSION,
+    is_baseline_case,
+    measurement_window,
     validate_case_artifacts,
     validate_run_metadata,
 )
@@ -53,6 +56,9 @@ SUMMARY_FIELDS = [
     "rejected",
     "failed",
     "measurement_duration_seconds",
+    "measurement_start_ns",
+    "measurement_end_ns",
+    "drain_duration_seconds",
     "achieved_throughput_rps",
     "drain_inclusive_throughput_rps",
     "completion_rate",
@@ -147,44 +153,29 @@ def summarize_case(
     rejected = [row for row in measurement if row["status"] == "rejected"]
     failed = [row for row in measurement if row["status"] == "failed"]
     terminal = [int(str(row["terminal_ns"])) for row in measurement]
-    if measurement_duration_seconds is None:
-        if metadata is None:
-            raise ValueError(
-                "measurement_duration_seconds or run metadata is required for throughput"
-            )
+    if metadata is not None:
         scientific = metadata.get("scientific_config")
         if not isinstance(scientific, Mapping):
             raise ValueError("Week 3 metadata lacks scientific_config")
-        workload = scientific.get("workload")
-        matrix = scientific.get("matrix")
-        if not isinstance(workload, Mapping) or not isinstance(matrix, Mapping):
-            raise ValueError("Week 3 metadata lacks workload/matrix duration evidence")
-        profile_config = matrix.get(values["profile"])
-        if not isinstance(profile_config, Mapping):
-            raise ValueError("Week 3 metadata lacks the case profile config")
-        duration = float(
-            profile_config.get("duration_seconds", workload["duration_seconds"])
-        )
-        warmup = float(
-            profile_config.get("warmup_seconds", workload["warmup_seconds"])
-        )
-        measurement_duration_seconds = duration - warmup
-    if measurement_duration_seconds <= 0:
-        raise ValueError("measurement duration must be positive")
-    scientific_warmup_seconds = 0.0
-    if metadata is not None:
-        scientific = metadata.get("scientific_config")
-        if isinstance(scientific, Mapping):
-            workload = scientific.get("workload")
-            matrix = scientific.get("matrix")
-            if isinstance(workload, Mapping) and isinstance(matrix, Mapping):
-                profile_config = matrix.get(values["profile"])
-                if isinstance(profile_config, Mapping):
-                    scientific_warmup_seconds = float(
-                        profile_config.get("warmup_seconds", workload["warmup_seconds"])
-                    )
-    measurement_start_ns = round(scientific_warmup_seconds * 1_000_000_000)
-    drain_elapsed_ns = max(1, max(terminal) - measurement_start_ns)
+        measurement_start_ns, measurement_end_ns = measurement_window(scientific, values["profile"])
+        declared_duration = (measurement_end_ns - measurement_start_ns) / 1e9
+        if measurement_duration_seconds is not None and not math.isclose(
+            measurement_duration_seconds, declared_duration
+        ):
+            raise ValueError("measurement duration differs from run metadata")
+    else:
+        if measurement_duration_seconds is None:
+            raise ValueError(
+                "measurement_duration_seconds or run metadata is required for throughput"
+            )
+        if not math.isfinite(measurement_duration_seconds) or measurement_duration_seconds <= 0:
+            raise ValueError("measurement duration must be finite and positive")
+        measurement_start_ns = 0
+        measurement_end_ns = round(measurement_duration_seconds * 1e9)
+    if measurement_end_ns <= measurement_start_ns:
+        raise ValueError("measurement window must span at least one nanosecond")
+    measurement_duration_seconds = (measurement_end_ns - measurement_start_ns) / 1e9
+    drain_elapsed_ns = max(measurement_end_ns, max(terminal)) - measurement_start_ns
     ttft_ms = [int(str(row["ttft_ns"])) / 1_000_000 for row in completed]
     e2e_ms = [int(str(row["e2e_latency_ns"])) / 1_000_000 for row in completed]
     queue_ms = [int(str(row["queueing_delay_ns"])) / 1_000_000 for row in completed]
@@ -214,9 +205,11 @@ def summarize_case(
         "rejected": len(rejected),
         "failed": len(failed),
         "measurement_duration_seconds": measurement_duration_seconds,
+        "measurement_start_ns": measurement_start_ns,
+        "measurement_end_ns": measurement_end_ns,
+        "drain_duration_seconds": drain_elapsed_ns / 1e9,
         "achieved_throughput_rps": len(completed) / measurement_duration_seconds,
-        "drain_inclusive_throughput_rps": len(completed)
-        / (drain_elapsed_ns / 1_000_000_000),
+        "drain_inclusive_throughput_rps": len(completed) / (drain_elapsed_ns / 1_000_000_000),
         "completion_rate": len(completed) / attempted,
         "rejection_rate": len(rejected) / attempted,
         "failure_rate": len(failed) / attempted,
@@ -232,9 +225,7 @@ def summarize_case(
         "p50_arrival_lag_ms": _nearest(arrival_lag_ms, 0.50),
         "p99_arrival_lag_ms": _nearest(arrival_lag_ms, 0.99),
         "mean_batch_fill_ratio": sum(fill) / len(fill) if fill else None,
-        "max_queue_depth": max(
-            int(str(row["queue_depth_at_admission"])) for row in measurement
-        ),
+        "max_queue_depth": max(int(str(row["queue_depth_at_admission"])) for row in measurement),
     }
 
 
@@ -390,8 +381,13 @@ def _median_summary(summary: pd.DataFrame, dimensions: Sequence[str]) -> pd.Data
     return summary.groupby(list(dimensions), as_index=False)[numeric].median()
 
 
-def _plot_throughput(summary: pd.DataFrame, path: Path) -> None:
-    base = _median_summary(summary, ["policy", "offered_load_ratio"])
+def baseline_summaries(summary: pd.DataFrame, config: Mapping[str, object]) -> pd.DataFrame:
+    selected = summary.apply(lambda row: is_baseline_case(row, config), axis=1)
+    return summary.loc[selected].copy()
+
+
+def _plot_throughput(summary: pd.DataFrame, path: Path, config: Mapping[str, object]) -> None:
+    base = _median_summary(baseline_summaries(summary, config), ["policy", "offered_load_ratio"])
     _, axis = plt.subplots(figsize=(9, 5))
     for policy, group in base.groupby("policy"):
         ordered = group.sort_values("offered_load_ratio")
@@ -423,7 +419,8 @@ def _plot_throughput(summary: pd.DataFrame, path: Path) -> None:
     plt.close()
 
 
-def _plot_ttft(summary: pd.DataFrame, path: Path) -> None:
+def _plot_ttft(summary: pd.DataFrame, path: Path, config: Mapping[str, object]) -> None:
+    summary = baseline_summaries(summary, config)
     if not any(
         pd.to_numeric(summary[column], errors="coerce").notna().any()
         for column in ("p95_ttft_ms", "p99_ttft_ms")
@@ -577,6 +574,8 @@ def write_figures(
     summaries: Sequence[Mapping[str, object]],
     events: Sequence[Mapping[str, object]],
     output_dir: str | Path,
+    *,
+    config: Mapping[str, object],
 ) -> tuple[Path, ...]:
     frame = pd.DataFrame(summaries)
     if frame.empty:
@@ -584,8 +583,8 @@ def write_figures(
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     outputs = tuple(destination / name for name in FIGURE_NAMES)
-    _plot_throughput(frame, outputs[0])
-    _plot_ttft(frame, outputs[1])
+    _plot_throughput(frame, outputs[0], config)
+    _plot_ttft(frame, outputs[1], config)
     _plot_window(frame, outputs[2])
     _plot_queue_depth(events, outputs[3])
     return outputs
@@ -638,7 +637,9 @@ def analyze(
             "formal Week 3 HF evidence contains failed requests or batches"
         )
     summaries = summarize_results(events, batches, metadata=metadata)
-    expected_figures = tuple(figures_dir / name for name in FIGURE_NAMES)
+    expected_figures = (
+        () if profile == "smoke" else tuple(figures_dir / name for name in FIGURE_NAMES)
+    )
     payload = analysis_payload(
         summaries,
         metadata=metadata,
@@ -647,7 +648,9 @@ def analyze(
         figures=expected_figures,
     )
     write_text(summary_path, summary_csv_text(summaries))
-    figures = write_figures(summaries, events, figures_dir)
+    figures = (
+        () if profile == "smoke" else write_figures(summaries, events, figures_dir, config=config)
+    )
     if figures != expected_figures:
         raise RuntimeError("Week 3 figure output paths are inconsistent")
     write_json(analysis_path, payload)
@@ -676,9 +679,7 @@ def main() -> None:
         output_dir=args.output_dir,
         artifact_root=args.artifact_root,
     )
-    print(
-        f"Analyzed {len(summaries)} Week 3 cases and wrote {len(FIGURE_NAMES)} figures"
-    )
+    print(f"Analyzed {len(summaries)} Week 3 cases")
 
 
 if __name__ == "__main__":

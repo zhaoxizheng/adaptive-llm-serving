@@ -246,6 +246,9 @@ bash scripts/benchmark_vllm.sh \
 
 > 在 balanced workload 下，选择满足 P99 TTFT < X ms、P99 TPOT < Y ms 且 error rate = 0 的最高稳定 request rate；对应 server 参数为 Z。
 
+同一 request rate 的三个 repeat 必须完整且全部满足 SLO，才能入选；报告保留各次结果，
+并使用选中负载中 TTFT 最差的 repeat 作为具体证据行，不能只展示最好的一次。
+
 这个 operating point 将作为 Week 5 可观测性、SLO 与容量实验的固定起点；Week 5 产出的 baseline 和 load points 再交给 Week 6 参数敏感性实验。
 
 ## 后续交接

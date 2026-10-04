@@ -50,11 +50,11 @@ calibrate-week03:
 simulate-week03:
 	PYTHON=$(PYTHON) CONFIG=$(WEEK03_CONFIG) PROFILE=primary BACKEND=fake OUTPUT_ROOT=$(WEEK03_SIMULATION_ROOT) RUN_LOG=$(WEEK03_SIMULATION_ROOT)/logs/week03.log bash scripts/run_week03.sh
 
-smoke-week03: calibrate-week03
-	PYTHON=$(PYTHON) CONFIG=$(WEEK03_CONFIG) PROFILE=smoke BACKEND=hf OUTPUT_ROOT=$(WEEK03_SMOKE_ROOT) RUN_LOG=$(WEEK03_SMOKE_ROOT)/logs/week03.log bash scripts/run_week03.sh
+smoke-week03:
+	PYTHON=$(PYTHON) CONFIG=$(WEEK03_CONFIG) WEEK02_CONFIG=$(WEEK02_CONFIG) CALIBRATE=1 PROFILE=smoke BACKEND=hf OUTPUT_ROOT=$(WEEK03_SMOKE_ROOT) RUN_LOG=$(WEEK03_SMOKE_ROOT)/logs/week03.log bash scripts/run_week03.sh
 
-run-week03: calibrate-week03
-	PYTHON=$(PYTHON) CONFIG=$(WEEK03_CONFIG) PROFILE=primary BACKEND=hf bash scripts/run_week03.sh
+run-week03:
+	PYTHON=$(PYTHON) CONFIG=$(WEEK03_CONFIG) WEEK02_CONFIG=$(WEEK02_CONFIG) CALIBRATE=1 PROFILE=primary BACKEND=hf bash scripts/run_week03.sh
 
 verify-week03:
 	$(PYTHON) -m scripts.verify_week03 --config $(WEEK03_CONFIG)
