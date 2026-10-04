@@ -1,0 +1,46 @@
+schema_version: 1
+week: 5
+baseline_config: configs/week04.yaml
+output_root: results/week05
+calibration:
+  # Fill these from the Week 4 low-load baseline before using --run.
+  confirmed: false
+  baseline_rps: null
+  evidence: null
+load:
+  multipliers: [0.25, 0.50, 0.75, 0.90, 1.00, 1.10, 1.25]
+  repeats: 3
+  warmup_requests: 20
+  duration_seconds: 120
+  cooldown_seconds: 10
+  request_timeout_seconds: 60
+  max_inflight: 128
+  max_requests: 100000
+  seed: 42
+workloads:
+  short_chat: {prompt_tokens: 128, output_tokens: 32}
+  long_context: {prompt_tokens: 2048, output_tokens: 32}
+  generation: {prompt_tokens: 128, output_tokens: 256}
+mixtures:
+  short_chat: {short_chat: 1.0}
+  long_context: {long_context: 1.0}
+  generation: {generation: 1.0}
+  mixed: {short_chat: 0.60, long_context: 0.20, generation: 0.20}
+# Experimental thresholds, calibrated once before the sweep, then frozen.
+slos:
+  short_chat: {ttft_ms: 500, tpot_ms: 50, e2e_ms: 2500}
+  long_context: {ttft_ms: 2000, tpot_ms: 60}
+  generation: {ttft_ms: 800, tpot_ms: 60}
+capacity:
+  max_error_rate: 0.0
+  max_timeout_rate: 0.0
+  min_throughput_ratio: 0.95
+  max_queue_growth_rps: 0.02
+  max_arrival_lag_ms: 100
+observability:
+  prometheus_url: http://127.0.0.1:9090
+  queries: observability/prometheus/queries.yaml
+  labels: {job: vllm, instance: '127.0.0.1:8000'}
+  step_seconds: 5
+  scrape_interval_seconds: 5
+  gpu_interval_seconds: 1

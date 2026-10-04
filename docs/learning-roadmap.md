@@ -158,6 +158,10 @@ estimated_cost: <amount-and-currency>
 
 ## 第二阶段：把 vLLM 当作用户使用（第 4–6 周）
 
+第 5–6 周已提供实现与中文代码导读：[Week 5：观测、SLO 与容量](week-05-code-walkthrough.md)、
+[Week 6：量化与参数调优](week-06-code-walkthrough.md)。代码生成不代表 GPU 实验已完成；
+容量与 operating point 需从各周保存的证据得出。
+
 这一阶段先把 vLLM 当成生产服务使用，不急于阅读内部源码。
 
 ### 基础任务
@@ -201,6 +205,10 @@ estimated_cost: <amount-and-currency>
 给定“P99 TTFT 小于 2 秒”等明确 SLO，能够通过实验选择合理的并发、batch 和显存参数，而不只是笼统地说 vLLM 更快。
 
 ## 第三阶段：读懂 vLLM 核心链路（第 7–10 周）
+
+第 7–8 周已提供固定 `vLLM 0.10.2` revision 的 trace patch、运行脚本和中文导读：
+[Week 7：请求链路](week-07-code-walkthrough.md)、[Week 8：Scheduler](week-08-code-walkthrough.md)。
+源码地图与 patch 可离线核对；runtime trace 和机制验证在单张 L4 上完成。
 
 ### 每周主线
 

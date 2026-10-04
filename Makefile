@@ -6,10 +6,17 @@ WEEK03_SIMULATION_ROOT ?= results/week03-simulation
 WEEK03_SMOKE_ROOT ?= results/week03-smoke
 WEEK04_CONFIG ?= configs/week04.yaml
 VLLM_PYTHON ?= .venv-vllm/bin/python
+WEEK05_CONFIG ?= configs/week05.yaml
+WEEK06_CONFIG ?= configs/week06.yaml
+WEEK07_CONFIG ?= configs/week07.yaml
+WEEK08_CONFIG ?= configs/week08.yaml
+WEEK06_PHASE ?= representation
 
 .PHONY: install install-dev check-env prepare-model smoke benchmark report run-week01 verify \
 	run-week02 verify-week02 calibrate-week03 simulate-week03 smoke-week03 run-week03 verify-week03 \
-	plan-week04 run-week04 analyze-week04 audit-template-week04 verify-week04 test lint
+	plan-week04 run-week04 analyze-week04 audit-template-week04 verify-week04 test lint \
+	plan-week05 run-week05 analyze-week05 plan-week06 run-week06 analyze-week06 \
+	plan-week07 run-week07 plan-week08 run-week08
 
 install:
 	$(PYTHON) -m pip install -r requirements.txt
@@ -73,6 +80,36 @@ audit-template-week04:
 
 verify-week04:
 	ANALYSIS_PYTHON=$(PYTHON) CONFIG=$(WEEK04_CONFIG) bash scripts/run_week04.sh --verify
+
+plan-week05:
+	$(PYTHON) -m scripts.run_week05 --config $(WEEK05_CONFIG) --plan
+
+run-week05:
+	$(VLLM_PYTHON) -m scripts.run_week05 --config $(WEEK05_CONFIG) --run
+
+analyze-week05:
+	$(PYTHON) -m src.analyze_week05
+
+plan-week06:
+	$(PYTHON) -m scripts.benchmark_week06 --config $(WEEK06_CONFIG) --phase $(WEEK06_PHASE) --plan
+
+run-week06:
+	$(VLLM_PYTHON) -m scripts.benchmark_week06 --config $(WEEK06_CONFIG) --phase $(WEEK06_PHASE) --run
+
+analyze-week06:
+	$(PYTHON) -m src.analyze_week06
+
+plan-week07:
+	$(PYTHON) -m scripts.run_source_study --config $(WEEK07_CONFIG) --plan
+
+run-week07:
+	$(VLLM_PYTHON) -m scripts.run_source_study --config $(WEEK07_CONFIG) --run
+
+plan-week08:
+	$(PYTHON) -m scripts.run_source_study --config $(WEEK08_CONFIG) --plan
+
+run-week08:
+	$(VLLM_PYTHON) -m scripts.run_source_study --config $(WEEK08_CONFIG) --run
 
 test:
 	$(PYTHON) -m pytest -q

@@ -1,0 +1,46 @@
+schema_version: 1
+vllm_version: 0.10.2
+# Candidate names must exist in the saved /metrics exposition before use.
+# All selectors are bound to one job/instance. Missing metrics invalidate capture.
+queries:
+  waiting:
+    metric: vllm:num_requests_waiting
+    unit: requests
+    kind: gauge
+    promql: 'sum(vllm:num_requests_waiting{{{labels}}})'
+  running:
+    metric: vllm:num_requests_running
+    unit: requests
+    kind: gauge
+    promql: 'sum(vllm:num_requests_running{{{labels}}})'
+  kv_usage:
+    metric: vllm:kv_cache_usage_perc
+    unit: fraction
+    kind: gauge
+    promql: 'max(vllm:kv_cache_usage_perc{{{labels}}})'
+  generation_tokens:
+    metric: vllm:generation_tokens_total
+    unit: tokens
+    kind: counter
+    promql: 'sum(vllm:generation_tokens_total{{{labels}}})'
+  prompt_tokens:
+    metric: vllm:prompt_tokens_total
+    unit: tokens
+    kind: counter
+    promql: 'sum(vllm:prompt_tokens_total{{{labels}}})'
+  successes:
+    metric: vllm:request_success_total
+    unit: requests
+    kind: counter
+    promql: 'sum(vllm:request_success_total{{{labels}}})'
+  queue_p99:
+    metric: vllm:request_queue_time_seconds_bucket
+    unit: seconds
+    kind: histogram
+    promql: 'histogram_quantile(0.99, sum by (le) (rate(vllm:request_queue_time_seconds_bucket{{{labels}}}[{window}s])))'
+  prefix_hits:
+    metric: vllm:prefix_cache_hits_total
+    unit: tokens
+    kind: counter
+    required: false
+    promql: 'sum(vllm:prefix_cache_hits_total{{{labels}}})'

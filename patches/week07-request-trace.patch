@@ -1,0 +1,219 @@
+diff --git a/vllm/_study_trace.py b/vllm/_study_trace.py
+new file mode 100644
+--- /dev/null
++++ b/vllm/_study_trace.py
+@@ -0,0 +1,66 @@
++"""Copied into the pinned vLLM tree as vllm/_study_trace.py by the patch builder."""
++
++import json
++import os
++import threading
++import time
++from datetime import datetime, timezone
++from pathlib import Path
++
++_LOCK = threading.Lock()
++_COUNT = 0
++_FIELDS = {
++    "prompt_tokens",
++    "max_tokens",
++    "finished",
++    "finish_reason",
++    "step",
++    "state",
++    "running_before",
++    "waiting_before",
++    "running_after",
++    "waiting_after",
++    "token_budget_initial",
++    "token_budget_remaining",
++    "max_num_seqs",
++    "scheduled",
++    "preempted",
++    "reason",
++    "kv_usage",
++    "request_ids",
++    "num_output_tokens",
++}
++
++
++def enabled():
++    return bool(os.environ.get("VLLM_STUDY_TRACE_DIR"))
++
++
++def emit(component, event, request_id=None, **fields):
++    global _COUNT
++    if not enabled():
++        return
++    if fields.keys() - _FIELDS:
++        raise ValueError("non-allowlisted study trace fields")
++    with _LOCK:
++        limit = int(os.environ.get("VLLM_STUDY_TRACE_LIMIT", "100000"))
++        if _COUNT > limit:
++            return
++        if _COUNT == limit:
++            event, request_id, fields = "trace_truncated", None, {}
++        record = {
++            "schema_version": 1,
++            "ts_ns": time.monotonic_ns(),
++            "wall_time_utc": datetime.now(timezone.utc).isoformat(),
++            "pid": os.getpid(),
++            "thread": threading.get_ident(),
++            "component": component,
++            "event": event,
++            "request_id": request_id,
++            **fields,
++        }
++        directory = Path(os.environ["VLLM_STUDY_TRACE_DIR"])
++        directory.mkdir(parents=True, exist_ok=True)
++        with (directory / f"trace-{os.getpid()}.jsonl").open("a") as handle:
++            handle.write(json.dumps(record, separators=(",", ":"), allow_nan=False) + "\n")
++        _COUNT += 1
+diff --git a/vllm/entrypoints/openai/serving_completion.py b/vllm/entrypoints/openai/serving_completion.py
+--- a/vllm/entrypoints/openai/serving_completion.py
++++ b/vllm/entrypoints/openai/serving_completion.py
+@@ -1,6 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+ 
++from vllm._study_trace import emit as study_emit, enabled as study_enabled
+ import asyncio
+ import time
+ from collections.abc import AsyncGenerator, AsyncIterator
+@@ -115,6 +116,7 @@
+         request_id = (
+             f"cmpl-"
+             f"{self._base_request_id(raw_request, request.request_id)}")
++        study_emit('api', 'request_received', request_id)
+         created_time = int(time.time())
+ 
+         request_metadata = RequestResponseMetadata(request_id=request_id)
+@@ -303,6 +305,7 @@
+ 
+             return fake_stream_generator()
+ 
++        study_emit('api', 'response_completed', request_id)
+         return response
+ 
+     async def completion_stream_generator(
+@@ -453,6 +456,7 @@
+                             total_tokens=prompt_tokens + completion_tokens,
+                         )
+ 
++                    study_emit('api', 'http_chunk', request_id)
+                     response_json = chunk.model_dump_json(exclude_unset=False)
+                     yield f"data: {response_json}\n\n"
+ 
+diff --git a/vllm/v1/core/sched/scheduler.py b/vllm/v1/core/sched/scheduler.py
+--- a/vllm/v1/core/sched/scheduler.py
++++ b/vllm/v1/core/sched/scheduler.py
+@@ -1,6 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+ 
++from vllm._study_trace import emit as study_emit, enabled as study_enabled
+ from __future__ import annotations
+ 
+ import itertools
+@@ -1094,6 +1095,8 @@
+     def add_request(self, request: Request) -> None:
+         self.waiting.add_request(request)
+         self.requests[request.request_id] = request
++        study_emit('scheduler', 'request_queued', request.request_id,
++                   state=request.status.name)
+         if self.log_stats:
+             request.record_event(EngineCoreEventType.QUEUED)
+ 
+@@ -1160,6 +1163,8 @@
+         assert request.is_finished()
+         self.kv_cache_manager.free(request)
+         del self.requests[request.request_id]
++        study_emit('scheduler', 'request_freed', request.request_id,
++                   finish_reason=request.status.name)
+ 
+     def get_num_unfinished_requests(self) -> int:
+         return len(self.waiting) + len(self.running)
+diff --git a/vllm/v1/engine/async_llm.py b/vllm/v1/engine/async_llm.py
+--- a/vllm/v1/engine/async_llm.py
++++ b/vllm/v1/engine/async_llm.py
+@@ -1,5 +1,6 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++from vllm._study_trace import emit as study_emit, enabled as study_enabled
+ import asyncio
+ import os
+ import socket
+@@ -315,6 +316,8 @@
+                                           queue)
+ 
+         # Add the EngineCoreRequest to EngineCore (separate process).
++        study_emit('async_llm', 'ipc_submit', request.request_id,
++                   prompt_tokens=len(request.prompt_token_ids))
+         await self.engine_core.add_request_async(request)
+ 
+         if self.log_requests:
+@@ -394,6 +397,7 @@
+                 # Note: both OutputProcessor and EngineCore handle their
+                 # own request cleanup based on finished.
+                 finished = out.finished
++                study_emit('async_llm', 'async_output', request_id, finished=out.finished)
+                 yield out
+ 
+         # If the request is disconnected by the client, generate()
+@@ -492,6 +496,8 @@
+ 
+         request_ids = (request_id, ) if isinstance(
+             request_id, str) else as_list(request_id)
++        for study_id in request_ids:
++            study_emit('async_llm', 'abort_sent', study_id)
+         all_request_ids = self.output_processor.abort_requests(request_ids)
+         await self.engine_core.abort_requests_async(all_request_ids)
+ 
+@@ -558,6 +564,7 @@
+                 # Note: both OutputProcessor and EngineCore handle their
+                 # own request cleanup based on finished.
+                 finished = out.finished
++                study_emit('async_llm', 'async_output', request_id, finished=out.finished)
+                 yield out
+ 
+         # If the request is disconnected by the client, generate()
+diff --git a/vllm/v1/engine/core.py b/vllm/v1/engine/core.py
+--- a/vllm/v1/engine/core.py
++++ b/vllm/v1/engine/core.py
+@@ -1,5 +1,6 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++from vllm._study_trace import emit as study_emit, enabled as study_enabled
+ import gc
+ import os
+ import queue
+@@ -248,6 +249,7 @@
+             logger.warning("Got kv_transfer_params, but no KVConnector found. "
+                            "Disabling KVTransfer for this request.")
+ 
++        study_emit('engine_core', 'core_received', request.request_id)
+         self.scheduler.add_request(request)
+ 
+     def abort_requests(self, request_ids: list[str]):
+@@ -256,6 +258,8 @@
+         # TODO: The scheduler doesn't really need to know the
+         # specific finish reason, TBD whether we propagate that
+         # (i.e. client-aborted vs stop criteria met).
++        for study_id in request_ids:
++            study_emit('engine_core', 'abort_received', study_id)
+         self.scheduler.finish_requests(request_ids,
+                                        RequestStatus.FINISHED_ABORTED)
+ 
+@@ -294,6 +298,12 @@
+             scheduler_output)
+         engine_core_outputs = self.scheduler.update_from_output(
+             scheduler_output, model_output)  # type: ignore
++
++        if study_enabled():
++            for study_batch in engine_core_outputs.values():
++                for study_output in study_batch.outputs:
++                    study_emit('engine_core', 'core_output', study_output.request_id,
++                               num_output_tokens=len(study_output.new_token_ids))
+ 
+         return (engine_core_outputs,
+                 scheduler_output.total_num_scheduled_tokens > 0)

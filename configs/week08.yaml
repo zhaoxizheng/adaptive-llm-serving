@@ -1,0 +1,30 @@
+schema_version: 1
+week: 8
+week07_config: configs/week07.yaml
+output_root: results/week08
+timeout_seconds: 120
+trace_event_limit: 100000
+scenarios:
+  baseline:
+    overrides: {}
+    requests:
+      - {request_id: baseline, arrival_ms: 0, prompt_tokens: 32, output_tokens: 8}
+  mixed:
+    overrides: {}
+    requests:
+      - {request_id: long, arrival_ms: 0, prompt_tokens: 2048, output_tokens: 32}
+      - {request_id: short1, arrival_ms: 10, prompt_tokens: 32, output_tokens: 16}
+      - {request_id: short2, arrival_ms: 20, prompt_tokens: 32, output_tokens: 16}
+  token_pressure:
+    overrides: {max_num_batched_tokens: 256, enable_chunked_prefill: true}
+    requests:
+      - {request_id: decode, arrival_ms: 0, prompt_tokens: 32, output_tokens: 256}
+      - {request_id: prefill, arrival_ms: 10, prompt_tokens: 2048, output_tokens: 32}
+  kv_pressure:
+    # Isolate KV capacity via a deterministic block override. Token budget stays fixed.
+    # 256 blocks * 16 tokens = 4096 total cache slots in the pinned single-GPU setup.
+    overrides: {num_gpu_blocks_override: 256}
+    requests:
+      - {request_id: kv1, arrival_ms: 0, prompt_tokens: 1536, output_tokens: 512}
+      - {request_id: kv2, arrival_ms: 0, prompt_tokens: 1536, output_tokens: 512}
+      - {request_id: kv3, arrival_ms: 0, prompt_tokens: 1536, output_tokens: 512}

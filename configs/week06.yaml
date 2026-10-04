@@ -1,0 +1,42 @@
+schema_version: 1
+week: 6
+week05_config: configs/week05.yaml
+handoff: results/week05/handoff.json
+output_root: results/week06
+variants:
+  bf16:
+    model: Qwen/Qwen2.5-0.5B-Instruct
+    revision: 7ae557604adf67be50417f59c2c2f167def9a775
+    compute_dtype: bfloat16
+    quantization: null
+    kv_cache_dtype: auto
+  awq:
+    model: Qwen/Qwen2.5-0.5B-Instruct-AWQ
+    revision: db09cd27ead7fee40cdee309693cf83601b9c899
+    compute_dtype: float16
+    quantization: awq
+    kv_cache_dtype: auto
+tokenizer:
+  id: Qwen/Qwen2.5-0.5B-Instruct
+  revision: 7ae557604adf67be50417f59c2c2f167def9a775
+quality:
+  prompts: configs/week06-quality.json
+  min_pass_fraction: 0.80
+  max_output_tokens: 64
+tuning:
+  # Choose these from each preceding phase's saved analysis, then run the next phase.
+  selected_variant: null
+  selected_max_num_seqs: null
+  selected_max_num_batched_tokens: null
+  memory_pressure_evidence: null
+  max_num_seqs: [8, 16, 32]
+  max_num_batched_tokens: [2048, 4096, 8192]
+  gpu_memory_utilization: [0.80, 0.90]
+confirmation:
+  soak_seconds: 1200
+  min_headroom_fraction: 0.10
+  min_goodput_gain_fraction: 0.05
+  min_memory_saving_fraction: 0.10
+cost:
+  # Set the actual instance price. Null means cost is unknown, never zero.
+  hourly_usd: null

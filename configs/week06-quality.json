@@ -1,0 +1,204 @@
+[
+  {
+    "id": "arithmetic-0",
+    "prompt": "What is 2 + 3? Reply with only the integer.",
+    "check": {
+      "type": "exact",
+      "value": "5"
+    }
+  },
+  {
+    "id": "arithmetic-1",
+    "prompt": "What is 3 + 4? Reply with only the integer.",
+    "check": {
+      "type": "exact",
+      "value": "7"
+    }
+  },
+  {
+    "id": "arithmetic-2",
+    "prompt": "What is 4 + 5? Reply with only the integer.",
+    "check": {
+      "type": "exact",
+      "value": "9"
+    }
+  },
+  {
+    "id": "arithmetic-3",
+    "prompt": "What is 5 + 6? Reply with only the integer.",
+    "check": {
+      "type": "exact",
+      "value": "11"
+    }
+  },
+  {
+    "id": "arithmetic-4",
+    "prompt": "What is 6 + 7? Reply with only the integer.",
+    "check": {
+      "type": "exact",
+      "value": "13"
+    }
+  },
+  {
+    "id": "arithmetic-5",
+    "prompt": "What is 7 + 8? Reply with only the integer.",
+    "check": {
+      "type": "exact",
+      "value": "15"
+    }
+  },
+  {
+    "id": "arithmetic-6",
+    "prompt": "What is 8 + 9? Reply with only the integer.",
+    "check": {
+      "type": "exact",
+      "value": "17"
+    }
+  },
+  {
+    "id": "arithmetic-7",
+    "prompt": "What is 9 + 10? Reply with only the integer.",
+    "check": {
+      "type": "exact",
+      "value": "19"
+    }
+  },
+  {
+    "id": "bilingual-0",
+    "prompt": "法国的首都是哪里？只回答城市名。",
+    "check": {
+      "type": "contains",
+      "value": "巴黎"
+    }
+  },
+  {
+    "id": "bilingual-1",
+    "prompt": "Translate cat into Chinese. Reply with one Chinese word.",
+    "check": {
+      "type": "contains",
+      "value": "猫"
+    }
+  },
+  {
+    "id": "bilingual-2",
+    "prompt": "What is the capital of Japan?",
+    "check": {
+      "type": "contains",
+      "value": "Tokyo"
+    }
+  },
+  {
+    "id": "bilingual-3",
+    "prompt": "水的化学式是什么？",
+    "check": {
+      "type": "contains",
+      "value": "H2O"
+    }
+  },
+  {
+    "id": "json-0",
+    "prompt": "Return only a JSON object with key \"answer\" and integer value 1. No markdown.",
+    "check": {
+      "type": "json",
+      "value": {
+        "answer": 1
+      }
+    }
+  },
+  {
+    "id": "json-1",
+    "prompt": "Return only a JSON object with key \"answer\" and integer value 2. No markdown.",
+    "check": {
+      "type": "json",
+      "value": {
+        "answer": 2
+      }
+    }
+  },
+  {
+    "id": "json-2",
+    "prompt": "Return only a JSON object with key \"answer\" and integer value 3. No markdown.",
+    "check": {
+      "type": "json",
+      "value": {
+        "answer": 3
+      }
+    }
+  },
+  {
+    "id": "json-3",
+    "prompt": "Return only a JSON object with key \"answer\" and integer value 4. No markdown.",
+    "check": {
+      "type": "json",
+      "value": {
+        "answer": 4
+      }
+    }
+  },
+  {
+    "id": "extraction-0",
+    "prompt": "The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The access label is ORCHID-11. What is the access label? Reply with only the label.",
+    "check": {
+      "type": "exact",
+      "value": "ORCHID-11"
+    }
+  },
+  {
+    "id": "extraction-1",
+    "prompt": "The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The access label is ORCHID-12. What is the access label? Reply with only the label.",
+    "check": {
+      "type": "exact",
+      "value": "ORCHID-12"
+    }
+  },
+  {
+    "id": "extraction-2",
+    "prompt": "The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The access label is ORCHID-13. What is the access label? Reply with only the label.",
+    "check": {
+      "type": "exact",
+      "value": "ORCHID-13"
+    }
+  },
+  {
+    "id": "extraction-3",
+    "prompt": "The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The access label is ORCHID-14. What is the access label? Reply with only the label.",
+    "check": {
+      "type": "exact",
+      "value": "ORCHID-14"
+    }
+  },
+  {
+    "id": "extraction-4",
+    "prompt": "The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The access label is ORCHID-15. What is the access label? Reply with only the label.",
+    "check": {
+      "type": "exact",
+      "value": "ORCHID-15"
+    }
+  },
+  {
+    "id": "extraction-5",
+    "prompt": "The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The background describes ordinary office supplies. The access label is ORCHID-16. What is the access label? Reply with only the label.",
+    "check": {
+      "type": "exact",
+      "value": "ORCHID-16"
+    }
+  },
+  {
+    "id": "boundary-en",
+    "prompt": "Reply with only the word READY.",
+    "near_context_limit": true,
+    "check": {
+      "type": "exact",
+      "value": "READY"
+    }
+  },
+  {
+    "id": "boundary-zh",
+    "prompt": "请只回复数字 42。",
+    "near_context_limit": true,
+    "check": {
+      "type": "exact",
+      "value": "42"
+    }
+  }
+]

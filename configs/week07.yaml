@@ -1,0 +1,9 @@
+schema_version: 1
+week: 7
+baseline_config: configs/week04.yaml
+operating_point: results/week06/analysis.json
+source_checkout: vendor/vllm
+output_root: results/week07
+timeout_seconds: 60
+abort_max_tokens: 2048
+trace_event_limit: 100000

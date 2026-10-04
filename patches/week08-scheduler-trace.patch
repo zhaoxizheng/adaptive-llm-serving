@@ -1,0 +1,56 @@
+diff --git a/vllm/v1/core/sched/scheduler.py b/vllm/v1/core/sched/scheduler.py
+--- a/vllm/v1/core/sched/scheduler.py
++++ b/vllm/v1/core/sched/scheduler.py
+@@ -187,6 +187,11 @@
+         # chunked prefills, prefix caching, speculative decoding,
+         # and the "jump decoding" optimization in the future.
+ 
++        if study_enabled():
++            self._study_step = getattr(self, '_study_step', -1) + 1
++            study_running_before = len(self.running)
++            study_waiting_before = len(self.waiting)
++
+         scheduled_new_reqs: list[Request] = []
+         scheduled_resumed_reqs: list[Request] = []
+         scheduled_running_reqs: list[Request] = []
+@@ -256,6 +261,8 @@
+                     num_new_tokens,
+                     num_lookahead_tokens=self.num_lookahead_tokens)
+                 if new_blocks is None:
++                    study_emit('scheduler', 'kv_allocation_failed', request.request_id,
++                               reason='allocate_slots_returned_none')
+                     # The request cannot be scheduled.
+                     # Preempt the lowest-priority request.
+                     if self.policy == SchedulingPolicy.PRIORITY:
+@@ -483,6 +490,8 @@
+                 )
+ 
+                 if new_blocks is None:
++                    study_emit('scheduler', 'kv_allocation_failed', request.request_id,
++                               reason='allocate_slots_returned_none')
+                     # The request cannot be scheduled.
+                     break
+ 
+@@ -625,6 +634,22 @@
+             batch = KVEventBatch(ts=time.time(), events=events)
+             self.kv_event_publisher.publish(batch)
+ 
++        if study_enabled():
++            study_emit(
++                'scheduler', 'step', step=self._study_step,
++                running_before=study_running_before,
++                waiting_before=study_waiting_before,
++                running_after=len(self.running), waiting_after=len(self.waiting),
++                token_budget_initial=self.max_num_scheduled_tokens,
++                token_budget_remaining=token_budget,
++                max_num_seqs=self.max_num_running_reqs,
++                kv_usage=self.kv_cache_manager.usage,
++                preempted=[r.request_id for r in preempted_reqs],
++                scheduled=[dict(request_id=rid, tokens=count,
++                                computed_tokens=self.requests[rid].num_computed_tokens,
++                                prompt_tokens=self.requests[rid].num_prompt_tokens)
++                           for rid, count in num_scheduled_tokens.items()])
++
+         self._update_after_schedule(scheduler_output)
+         return scheduler_output
+ 

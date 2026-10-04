@@ -31,10 +31,10 @@ weekly execution plans and reading lists:
 - [Week 2 execution plan](docs/week-02-plan.md), [references](docs/week-02-references.md), and [code walkthrough](docs/week-02-code-walkthrough.md)
 - [Week 3 execution plan](docs/week-03-plan.md), [references](docs/week-03-references.md), and [code walkthrough](docs/week-03-code-walkthrough.md)
 - [Week 4 execution plan](docs/week-04-plan.md), [references](docs/week-04-references.md), and [code walkthrough](docs/week-04-code-walkthrough.md)
-- [Week 5 execution plan](docs/week-05-plan.md) and [references](docs/week-05-references.md)
-- [Week 6 execution plan](docs/week-06-plan.md) and [references](docs/week-06-references.md)
-- [Week 7 execution plan](docs/week-07-plan.md) and [references](docs/week-07-references.md)
-- [Week 8 execution plan](docs/week-08-plan.md) and [references](docs/week-08-references.md)
+- [Week 5 execution plan](docs/week-05-plan.md), [references](docs/week-05-references.md), and [Chinese code walkthrough](docs/week-05-code-walkthrough.md)
+- [Week 6 execution plan](docs/week-06-plan.md), [references](docs/week-06-references.md), and [Chinese code walkthrough](docs/week-06-code-walkthrough.md)
+- [Week 7 execution plan](docs/week-07-plan.md), [references](docs/week-07-references.md), and [Chinese code walkthrough](docs/week-07-code-walkthrough.md)
+- [Week 8 execution plan](docs/week-08-plan.md), [references](docs/week-08-references.md), and [Chinese code walkthrough](docs/week-08-code-walkthrough.md)
 - [Week 9 execution plan](docs/week-09-plan.md) and [references](docs/week-09-references.md)
 - [Week 10 execution plan](docs/week-10-plan.md) and [references](docs/week-10-references.md)
 - [Week 11 execution plan](docs/week-11-plan.md) and [references](docs/week-11-references.md)
@@ -230,6 +230,37 @@ or benchmark evidence. After the GPU run, sync its evidence, stop the VM, run
 `make analyze-week04`, complete the report, create and fill the resource-audit
 template from real external evidence, then run `make verify-week04`. These post-sync
 steps use the regular `PYTHON` environment; verification rejects an unconfirmed audit.
+
+## Weeks 5–8 Study Workflows
+
+Weeks 5–8 now include executable study tooling and Chinese code walkthroughs. The
+implementation is separate from completion of the GPU experiments: no capacity,
+quantization gain, or runtime trace is claimed by the checked-in report templates.
+
+```bash
+# CPU-only planning; requires the existing Python 3.12/PyYAML environment.
+make plan-week05 plan-week06 plan-week07 plan-week08 PYTHON=python3.12
+
+# On the prepared L4 VM, after the prerequisites in each walkthrough are met:
+make run-week05
+make run-week06 WEEK06_PHASE=representation
+make run-week07
+make run-week08
+```
+
+Week 5 requires measured load/SLO calibration and an existing Prometheus target.
+Week 6 reads its verified load-point handoff and runs separate representation,
+sequences, tokens, optional memory, and confirmation phases. Weeks 7–8 require the
+pinned, patched vLLM source tree to be the package actually imported at runtime.
+Use the walkthroughs for the phase transitions and source preparation before
+running these commands. Every server is local to one L4 VM; each study cleans up
+its own server process group, while VM shutdown remains a separate lifecycle step.
+
+`make analyze-week05` and `make analyze-week06` rebuild results after syncing them
+to the Mac. Raw runs are stored under `results/week05/raw/sessions/` and
+`results/week06/raw/sessions/`; source-study evidence is under each week's `traces/`.
+New sessions retain failures without overwriting earlier evidence. Archive failed
+or duplicate sessions before selecting a complete experiment for comparison.
 
 ## Experiment Contract
 

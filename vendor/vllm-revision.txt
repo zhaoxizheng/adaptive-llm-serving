@@ -1,0 +1,6 @@
+release=v0.10.2
+package_version=0.10.2
+commit=01efc7ef781391e744ed08c3292817a773d654e6
+repository=https://github.com/vllm-project/vllm.git
+patch_order=week07-request-trace.patch,week08-scheduler-trace.patch
+runtime_status=not_executed

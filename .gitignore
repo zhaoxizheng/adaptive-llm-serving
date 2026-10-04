@@ -15,4 +15,6 @@ checkpoints/
 *.pt
 *.pth
 results/**/raw/*.log
+results/week0[5-8]/
+vendor/vllm/
 
