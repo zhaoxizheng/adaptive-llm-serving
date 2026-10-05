@@ -1,0 +1,34 @@
+schema_version: 1
+week: 16
+kind: gateway_api
+baseline: configs/serving-baseline.yaml
+cluster_lock: configs/cluster-lab.yaml
+output_root: results/week16
+seed: 42
+repeats: 3
+requests: 1000
+max_inflight: 128
+timeout_seconds: 120
+warmup_requests: 3
+rates: {low: 1.0}
+workloads: [short]
+prefix_families: 4
+shared_tokens: 512
+shapes:
+  short: {prompt_tokens: 128, output_tokens: 32}
+  long: {prompt_tokens: 2048, output_tokens: 256}
+  shared: {prompt_tokens: 768, output_tokens: 32}
+endpoint: http://127.0.0.1:8080/v1/completions
+hostname: inference.lab.invalid
+weight_check: {minimum_samples: 1000, confidence_z: 3.290526731}
+cases:
+  direct: {cache: cold, endpoint: "http://127.0.0.1:8082/v1/completions"}
+  only_a: {cache: cold, header: only-a, weights: [100, 0]}
+  half: {cache: cold, header: half, weights: [50, 50]}
+  canary: {cache: cold, header: canary, weights: [90, 10]}
+  match_a: {cache: cold, header: match-a, weights: [100, 0]}
+  match_b: {cache: cold, header: match-b, weights: [0, 100]}
+  no_hostname: {cache: cold, hostname: no-match.lab.invalid, expected_failure: true}
+  no_path: {cache: cold, path: /not-an-inference-route, header: half, expected_failure: true}
+  invalid_backend: {cache: cold, header: invalid, expected_failure: true}
+  wrong_port: {cache: cold, header: wrong-port, expected_failure: true}

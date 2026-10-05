@@ -70,7 +70,7 @@ def runtime_identity(*, source_study=False):
 
 @contextlib.contextmanager
 def managed_server(base, argv, root, *, env=None, source_study=False, launch_prefix=None,
-                   shutdown_signal=signal.SIGTERM):
+                   shutdown_signal=signal.SIGTERM, runtime_probe=None):
     """Own a new process group; never attach to or kill an existing server."""
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
@@ -83,7 +83,8 @@ def managed_server(base, argv, root, *, env=None, source_study=False, launch_pre
     url = f"http://{'[' + host + ']' if ':' in host else host}:{port}"
     # Source-study callers verified the exact commit, patch bytes and import path.
     # Editable builds can carry a local/dev suffix despite matching that source.
-    runtime = runtime_identity(source_study=source_study or bool(env and env.get("VLLM_STUDY_TRACE_DIR")))
+    runtime = (runtime_probe() if runtime_probe else runtime_identity(
+        source_study=source_study or bool(env and env.get("VLLM_STUDY_TRACE_DIR"))))
     binary = Path(os.sys.executable).parent / "vllm"
     if not binary.is_file():
         raise RuntimeError("vllm CLI is missing from the selected Python environment")

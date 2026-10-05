@@ -14,6 +14,10 @@ WEEK09_CONFIG ?= configs/week09.yaml
 WEEK10_CONFIG ?= configs/week10.yaml
 WEEK11_CONFIG ?= configs/week11-profiler.yaml
 WEEK12_CONFIG ?= configs/week12-nsys.yaml
+WEEK13_CONFIG ?= configs/week13-prefix.yaml
+WEEK14_CONFIG ?= configs/week14-optimization.yaml
+WEEK15_CONFIG ?= configs/week15-multireplica.yaml
+WEEK16_CONFIG ?= configs/week16-l7-matrix.yaml
 WEEK06_PHASE ?= representation
 
 .PHONY: install install-dev check-env prepare-model smoke benchmark report run-week01 verify \
@@ -127,4 +131,20 @@ test:
 
 lint:
 	$(PYTHON) -m ruff check src scripts tests
+
+.PHONY: plan-week13 plan-week14 plan-week15 plan-week16 run-week13 run-week14
+
+plan-week13:
+	$(PYTHON) -m scripts.run_kernel_study --plan
+	$(PYTHON) -m scripts.run_serving_experiment --config $(WEEK13_CONFIG) --plan
+
+plan-week14:
+	$(PYTHON) -m scripts.run_serving_experiment --config $(WEEK14_CONFIG) --plan
+	$(PYTHON) -m scripts.run_serving_experiment --config configs/week14-tp.yaml --plan
+
+plan-week15 plan-week16:
+	$(PYTHON) -m scripts.run_cluster_study --config $(WEEK$(patsubst plan-week%,%,$@)_CONFIG) --plan
+
+run-week13 run-week14:
+	$(VLLM_PYTHON) -m scripts.run_serving_experiment --config $(WEEK$(patsubst run-week%,%,$@)_CONFIG) --run
 

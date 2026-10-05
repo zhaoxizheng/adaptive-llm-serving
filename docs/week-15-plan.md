@@ -4,7 +4,7 @@
 >
 > 本周主线：复用已掌握的 Kubernetes 和 Prometheus，以 Week 14 冻结的单节点 replica shape 建立多副本 baseline，验证路由、请求排空和冷启动；每个 replica 可以使用一张或同一节点内多张 GPU。
 >
-> 前置：[Week 14 plan](week-14-plan.md) 的固定 serving baseline；阅读：[Week 15 references](week-15-references.md)。下列文件是待完成产出。
+> 前置：[Week 14 plan](week-14-plan.md) 的固定 serving baseline；阅读：[Week 15 references](week-15-references.md)。RR 代码、部署模板与采集入口已提供，见[中文代码导读](week-15-code-walkthrough.md)；多副本性能与生命周期仍待真实集群验收。
 
 ## 本周目标
 

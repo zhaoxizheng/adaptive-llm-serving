@@ -1,0 +1,17 @@
+schema_version: 1
+# Copy this file for a real independent lab. No installation or deployment is implicit.
+context: null
+namespace: serving-lab
+independent_lab: false
+gateway_image: null  # build deploy/gateway/Dockerfile and pin its digest
+max_gpu_slots: 2
+private_entrypoint_verified: false
+gateway_api:
+  crd_bundle: null
+  controller_release: null
+  controller_image: null
+  dataplane_image: null
+  controller_name: gateway.envoyproxy.io/gatewayclass-controller
+  class_name: serving-lab
+  conformance_evidence: null
+  kubernetes_version: null

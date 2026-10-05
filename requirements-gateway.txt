@@ -1,0 +1,2 @@
+# Separate CPU gateway image; no CUDA or transformers required.
+aiohttp==3.10.5

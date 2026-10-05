@@ -1,0 +1,22 @@
+schema_version: 1
+week: 14
+kind: tp
+baseline: configs/serving-baseline.yaml
+output_root: results/week14/tp
+seed: 42
+repeats: 3
+requests: 200
+max_inflight: 128
+timeout_seconds: 120
+warmup_requests: 3
+rates: {low: 1.0, near_slo: null}
+workloads: [short, long, mixed, shared]
+prefix_families: 4
+shared_tokens: 512
+shapes:
+  short: {prompt_tokens: 128, output_tokens: 32}
+  long: {prompt_tokens: 2048, output_tokens: 32}
+  shared: {prompt_tokens: 768, output_tokens: 32}
+cases:
+  tp1: {cache: cold, devices: [0], overrides: {tensor_parallel_size: 1}}
+  tp2: {cache: cold, devices: [0, 1], overrides: {tensor_parallel_size: 2}}

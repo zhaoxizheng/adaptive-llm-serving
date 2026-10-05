@@ -4,7 +4,7 @@
 >
 > 本周主线：把 Week 11–13 的证据转成可重复的优化 A/B，并正式验证“一个逻辑 vLLM replica 在一台服务器内使用一张或多张 GPU”的部署形态，为 Week 15 冻结每副本资源规格。
 >
-> 前置：[Week 13 plan](week-13-plan.md) 的瓶颈证据和无 profiler baseline；阅读：[Week 14 references](week-14-references.md)。下列文件是待完成产出。
+> 前置：[Week 13 plan](week-13-plan.md) 的瓶颈证据和无 profiler baseline；阅读：[Week 14 references](week-14-references.md)。配置、运行器与部署模板已提供，见[中文代码导读](week-14-code-walkthrough.md)；优化、TP 与最终 baseline 仍待真实实验验收。
 
 ## 本周目标
 

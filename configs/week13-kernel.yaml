@@ -1,0 +1,21 @@
+schema_version: 1
+week: 13
+baseline: configs/serving-baseline.yaml
+output_root: results/week13/ncu
+target:
+  week12_evidence: null
+  hypothesis: null
+  kernel_regex: null
+  shape: null
+  # Week 10 patch emits this push/pop range inside the selected worker step.
+  nvtx_include: "regex:study/execute/.*"
+ncu:
+  binary: ncu
+  sections: [SpeedOfLight]
+  replay_mode: kernel
+  cache_control: all
+  clock_control: base
+  launch_skip: 0
+  launch_count: 1
+  timeout_seconds: 300
+workload: {prompt_tokens: 2048, output_tokens: 1}

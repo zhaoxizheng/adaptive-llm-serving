@@ -39,10 +39,10 @@ weekly execution plans and reading lists:
 - [Week 10 execution plan](docs/week-10-plan.md), [references](docs/week-10-references.md), and [Chinese code walkthrough](docs/week-10-code-walkthrough.md)
 - [Week 11 execution plan](docs/week-11-plan.md), [references](docs/week-11-references.md), and [Chinese code walkthrough](docs/week-11-code-walkthrough.md)
 - [Week 12 execution plan](docs/week-12-plan.md), [references](docs/week-12-references.md), and [Chinese code walkthrough](docs/week-12-code-walkthrough.md)
-- [Week 13 execution plan](docs/week-13-plan.md) and [references](docs/week-13-references.md)
-- [Week 14 execution plan](docs/week-14-plan.md) and [references](docs/week-14-references.md)
-- [Week 15 execution plan](docs/week-15-plan.md) and [references](docs/week-15-references.md)
-- [Week 16 execution plan](docs/week-16-plan.md) and [references](docs/week-16-references.md)
+- [Week 13 execution plan](docs/week-13-plan.md), [references](docs/week-13-references.md), and [Chinese code walkthrough](docs/week-13-code-walkthrough.md)
+- [Week 14 execution plan](docs/week-14-plan.md), [references](docs/week-14-references.md), and [Chinese code walkthrough](docs/week-14-code-walkthrough.md)
+- [Week 15 execution plan](docs/week-15-plan.md), [references](docs/week-15-references.md), and [Chinese code walkthrough](docs/week-15-code-walkthrough.md)
+- [Week 16 execution plan](docs/week-16-plan.md), [references](docs/week-16-references.md), and [Chinese code walkthrough](docs/week-16-code-walkthrough.md)
 - [Week 17 execution plan](docs/week-17-plan.md) and [references](docs/week-17-references.md)
 - [Week 18 execution plan](docs/week-18-plan.md) and [references](docs/week-18-references.md)
 - [Week 19 execution plan](docs/week-19-plan.md) and [references](docs/week-19-references.md)
@@ -286,6 +286,27 @@ by generating this code. Offline parsers and synthetic CPU tests validate eviden
 contracts; real cache reuse, graph replay, profiler overhead, and GPU gaps require
 the saved VM runs. Each run preserves a unique session, failure state, raw evidence,
 and an explicit `observed` or `not_observed` mechanism result.
+
+## Weeks 13–16: Optimization and multi-replica routing
+
+See the [Chinese runbook](docs/week-13-16-runbook.md) for version locks, prerequisites,
+execution commands, result layouts, and hardware acceptance requirements.
+
+```bash
+make plan-week13 plan-week14 plan-week15 plan-week16 PYTHON=python3.12
+python3.12 -m pytest -q tests/test_serving_experiments.py tests/test_rr_gateway.py
+```
+
+Week 13 supplies bounded Nsight Compute capture/export and a separate unprofiled prefix
+cache matrix. Week 14 adds chunk-budget/execution-mode regressions and same-host TP=1/2.
+Week 15 supplies a request-level RR streaming proxy, replica manifests, HPA configuration,
+and lifecycle evidence collection. Week 16 supplies Gateway API core v1 manifests,
+generation/status checks, L7 cases, and backend-attribution/weight analysis.
+
+`configs/serving-baseline.yaml` starts unfrozen, and `configs/cluster-lab.yaml` requires real
+image digests and environment versions. GPU experiments, counter permissions, Kubernetes
+deployments, and controller capabilities have not been verified by generating this code.
+Cluster actions are explicit script modes; the plan/render modes do not access a cluster.
 
 ## Experiment Contract
 

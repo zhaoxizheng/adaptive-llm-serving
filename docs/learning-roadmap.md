@@ -280,7 +280,9 @@ Attention / CUDA Graph / Model
 
 第 11–12 周已有成对 baseline/profile runner、离线摘要和中文导读：
 [Week 11：PyTorch Profiler](week-11-code-walkthrough.md)、
-[Week 12：Nsight Systems](week-12-code-walkthrough.md)。代码生成和 CPU 测试不代表已完成
+[Week 12：Nsight Systems](week-12-code-walkthrough.md)。
+第 13–14 周已提供实现与中文导读：[Week 13：Kernel/APC](week-13-code-walkthrough.md)、
+[Week 14：优化与 TP](week-14-code-walkthrough.md)。代码生成和 CPU 测试不代表已完成
 GPU capture；报告需用真实 trace、overhead、shape 检查和资源停止证据填写。
 
 ### 每周主线
@@ -342,6 +344,9 @@ Kubernetes 基础已经掌握，本阶段不再学习 Pod、Deployment、Service
 
 执行计划：[Week 15](week-15-plan.md) / [资料](week-15-references.md)。使用两个完整 replica slots；若每个 replica 使用 `G` 张同节点 GPU，则共需 `2 × G` 张 GPU。区分 request-level round-robin 与 Service 的连接分发，并将 HPA 的副本变化和 GPU 成本一起报告。
 
+实现与中文导读：[Week 15：RR 与生命周期](week-15-code-walkthrough.md)。
+四周的环境锁、运行模式与验收边界见 [第 13–16 周运行约定](week-13-16-runbook.md)。
+
 ### 部署任务
 
 - [ ] 创建容器与 Kubernetes 模板；实现后复用它们部署 vLLM server
@@ -372,6 +377,7 @@ Kubernetes 基础已经掌握，本阶段不再学习 Pod、Deployment、Service
 ### 每周主线
 
 - Week 16：Gateway API v1 L7 Baseline，用 `GatewayClass`、`Gateway` 和 `HTTPRoute` 建立可审计的 matching、traffic splitting、streaming 与请求归属基线（[计划](week-16-plan.md) / [资料](week-16-references.md)）。
+- Week 16 实现与中文导读：[L7 路由代码](week-16-code-walkthrough.md) / [Gateway contract](gateway-api-contract.md)；真实 controller 与 GPU 验收仍需执行。
 - Week 17：GAIE `InferencePool` v1 与 Reference EPP，验证 `InferencePool`、reference EPP/ext-proc 数据路径、失败策略与 conformance 边界（[计划](week-17-plan.md) / [资料](week-17-references.md)）。
 - Week 18：llm-d Router/EPP：Load-aware 与 Precise Prefix-aware Routing；固定双副本对比两种策略，并验证 locality、load、metric freshness 与 staleness 边界（[计划](week-18-plan.md) / [资料](week-18-references.md)）。
 

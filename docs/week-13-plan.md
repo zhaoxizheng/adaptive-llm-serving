@@ -4,7 +4,7 @@
 >
 > 本周主线：从 Week 12 选出的热点 kernel 出发，用 Nsight Compute 验证瓶颈假设；另用无 profiler 的服务实验量化 prefix caching 收益，不把两种测量混为一谈。
 >
-> 前置：[Week 12 plan](week-12-plan.md) 的 timeline 与 kernel target；阅读：[Week 13 references](week-13-references.md)。下列文件是待完成产出，不代表仓库已有实现。
+> 前置：[Week 12 plan](week-12-plan.md) 的 timeline 与 kernel target；阅读：[Week 13 references](week-13-references.md)。配置、运行器与报告模板已提供，见[中文代码导读](week-13-code-walkthrough.md)；真实 counter 与服务结果仍待执行验收。
 
 ## 本周目标
 

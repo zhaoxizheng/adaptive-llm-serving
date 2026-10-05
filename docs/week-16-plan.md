@@ -4,7 +4,7 @@
 >
 > 本周主线：在 Week 15 的固定双副本 vLLM baseline 上，用 Gateway API core v1 建立可审计的 L7 matching、traffic splitting、状态与失败语义。每个 replica 沿用 `1 Pod / 1 node / G GPUs / TP=G`，为 Week 17 的 InferencePool 数据路径提供稳定对照。
 >
-> 前置：[Week 15 plan](week-15-plan.md) 的双副本、request-level attribution 与 streaming baseline；阅读：[Week 16 references](week-16-references.md)。下列文件均为计划产出，不代表仓库中已实现或已经验证。
+> 前置：[Week 15 plan](week-15-plan.md) 的双副本、request-level attribution 与 streaming baseline；阅读：[Week 16 references](week-16-references.md)。L7 配置模板、运行器与分析代码已提供，见[中文代码导读](week-16-code-walkthrough.md)；固定 controller 能力与运行结果仍待真实集群验收。
 
 ## 本周目标
 

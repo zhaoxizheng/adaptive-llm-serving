@@ -1,0 +1,31 @@
+schema_version: 1
+# A candidate contract, not a measured Week 14 selection. Freeze after review.
+frozen: false
+selection_evidence: null
+vllm_commit: 01efc7ef781391e744ed08c3292817a773d654e6
+source_config: configs/week07.yaml
+image: null  # registry/repository@sha256:<64 hex>; use the tested source build
+model:
+  id: Qwen/Qwen2.5-0.5B-Instruct
+  revision: 7ae557604adf67be50417f59c2c2f167def9a775
+  served_model_name: week04-qwen2.5-0.5b
+  dtype: bfloat16
+engine:
+  max_model_len: 4096
+  max_num_seqs: 16
+  max_num_batched_tokens: 4096
+  gpu_memory_utilization: 0.85
+  enable_prefix_caching: false
+  enable_chunked_prefill: true
+  enforce_eager: false
+  tensor_parallel_size: 1
+  pipeline_parallel_size: 1
+gpus_per_replica: 1
+gpu_product: NVIDIA-L4
+gpu_node_selector: {key: nvidia.com/gpu.product, value: NVIDIA-L4}
+gpu_topology: null
+cpu: "4"
+memory: 16Gi
+slo: {ttft_ms: 2000, tpot_ms: 100, max_error_rate: 0.0}
+near_slo_rps: null  # copy the measured Week 6/14 operating point, never guess
+max_arrival_lag_ms: 100

@@ -1,0 +1,106 @@
+# TEMPLATE: render from the frozen baseline before applying.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rr-discovery
+  namespace: serving-lab
+  labels:
+    app.kubernetes.io/part-of: serving-study
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rr-discovery
+  namespace: serving-lab
+  labels:
+    app.kubernetes.io/part-of: serving-study
+rules:
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rr-discovery
+  namespace: serving-lab
+  labels:
+    app.kubernetes.io/part-of: serving-study
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rr-discovery
+subjects:
+- kind: ServiceAccount
+  name: rr-discovery
+  namespace: serving-lab
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rr-gateway
+  namespace: serving-lab
+  labels:
+    app.kubernetes.io/part-of: serving-study
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rr-gateway
+  template:
+    metadata:
+      labels:
+        app: rr-gateway
+        app.kubernetes.io/part-of: serving-study
+    spec:
+      serviceAccountName: rr-discovery
+      terminationGracePeriodSeconds: 150
+      containers:
+      - name: gateway
+        image: REPLACE_WITH_PROXY_IMAGE_DIGEST
+        ports:
+        - name: http
+          containerPort: 8080
+        env:
+        - name: DISCOVERY_SERVICE
+          value: vllm-pool
+        - name: LISTEN_HOST
+          value: 0.0.0.0
+        - name: POD_NAMESPACE
+          value: serving-lab
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+        resources:
+          requests:
+            cpu: 500m
+            memory: 128Mi
+          limits:
+            cpu: '2'
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rr-gateway
+  namespace: serving-lab
+  labels:
+    app.kubernetes.io/part-of: serving-study
+spec:
+  selector:
+    app: rr-gateway
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
