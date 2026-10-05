@@ -6,6 +6,8 @@
 >
 > 前置：[Week 15 plan](week-15-plan.md) 的 vLLM `Deployment`、HPA/冷启动基线，以及 [Week 18 plan](week-18-plan.md) 的固定 Gateway/GAIE/llm-d 数据面；Week 19 的 KServe alpha owner 仅作独立控制面对照，不是本周默认 scale target。阅读：[Week 20 references](week-20-references.md)。下列文件均为计划产出，不代表 autoscaler 已部署或已证明节省成本。
 
+> 实现入口：[Week 20 中文代码导读](week-20-code-walkthrough.md)、[统一运行手册](week-17-20-runbook.md)。实验工具、配置和报告模板已提供；release-specific 输入与真实集群/GPU 结果仍需准备和验收。
+
 ## 本周目标
 
 1. 为一个推理压力指标冻结 query、单位、series selection、聚合、freshness 与缺失行为。

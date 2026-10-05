@@ -19,3 +19,7 @@ No controller, GPU node pool, public endpoint, or cloud resource is installed by
 The experiment namespace must already exist. Switching Week 15 to Week 16 requires removing
 the old lab HPA/replicas within the allocated budget. Fixed and HPA cells must not compete for
 the same Deployment scale target. Rolling updates use no surge and may temporarily reduce capacity.
+
+Weeks 17–20 add [GAIE](gaie/README.md), [llm-d](llm-d-router/README.md),
+[KServe release inputs](kserve/base/README.md), and [HPA/KEDA](autoscaling/README.md).
+See the [Chinese runbook](../docs/week-17-20-runbook.md) for runtime preparation.

@@ -4,7 +4,9 @@
 >
 > 本周主线：在 Week 16 的 Gateway API v1 baseline 上固定 GAIE v1.0.0，验证 `InferencePool` v1、reference Endpoint Picker (EPP) 与 gateway `ext_proc` 数据路径，并把 conformance/学习用途和生产选型严格分开。
 >
-> 前置：[Week 16 plan](week-16-plan.md) 的 Gateway/HTTPRoute contract、固定单节点 GPU/TP shape 的双副本 workload 与请求归属证据；阅读：[Week 17 references](week-17-references.md)。下列文件均为计划产出，不代表仓库中已实现、已经通过 conformance 或可用于生产。
+> 前置：[Week 16 plan](week-16-plan.md) 的 Gateway/HTTPRoute contract、固定单节点 GPU/TP shape 的双副本 workload 与请求归属证据；阅读：[Week 17 references](week-17-references.md)。下列交付项包含已提供的实验工具和待验收的 runtime artifacts，不代表已经通过 conformance 或可用于生产。
+
+> 实现入口：[Week 17 中文代码导读](week-17-code-walkthrough.md)、[统一运行手册](week-17-20-runbook.md)。实验工具、配置和报告模板已提供；release-specific 输入与真实集群/GPU 结果仍需准备和验收。
 
 ## 本周目标
 

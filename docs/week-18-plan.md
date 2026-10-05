@@ -4,7 +4,9 @@
 >
 > 本周主线：保持 Week 17 的 Gateway API 与 `InferencePool` v1 contract，替换 reference EPP 为固定版本 llm-d Router/EPP，在双副本上对比 load-aware 与 precise prefix-aware pipeline，并验证 locality、排队和状态不新鲜的边界。
 >
-> 前置：[Week 17 plan](week-17-plan.md) 的 InferencePool、ext_proc、failure 与 request attribution contract；阅读：[Week 18 references](week-18-references.md)。下列文件均为计划产出，不代表仓库中已实现、性能收益已成立或该方案在任意环境均可托管。
+> 前置：[Week 17 plan](week-17-plan.md) 的 InferencePool、ext_proc、failure 与 request attribution contract；阅读：[Week 18 references](week-18-references.md)。下列交付项包含已提供的实验工具和待验收的 runtime artifacts，不代表性能收益已成立或该方案在任意环境均可托管。
+
+> 实现入口：[Week 18 中文代码导读](week-18-code-walkthrough.md)、[统一运行手册](week-17-20-runbook.md)。实验工具、配置和报告模板已提供；release-specific 输入与真实集群/GPU 结果仍需准备和验收。
 
 ## 本周目标
 

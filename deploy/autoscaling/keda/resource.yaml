@@ -1,0 +1,31 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vllm-pressure
+  namespace: serving-lab
+  labels:
+    app.kubernetes.io/part-of: serving-study
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vllm
+  minReplicaCount: 1
+  maxReplicaCount: 2
+  pollingInterval: 15
+  cooldownPeriod: 120
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+        scaleDown:
+          stabilizationWindowSeconds: 120
+  triggers:
+  - type: prometheus
+    metricType: AverageValue
+    metadata:
+      serverAddress: http://prometheus.serving-lab.svc:9090
+      query: serving_lab:queue_total{namespace="serving-lab",workload="vllm"}
+      threshold: '4'
+      ignoreNullValues: 'false'

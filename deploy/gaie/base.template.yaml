@@ -1,0 +1,221 @@
+# Template: replace image placeholders and add pinned release artifacts.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: serving-lab
+  labels:
+    app.kubernetes.io/part-of: serving-study
+spec:
+  replicas: 2
+  revisionHistoryLimit: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+        serving-study-role: engine
+        app.kubernetes.io/part-of: serving-study
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 160
+      nodeSelector:
+        nvidia.com/gpu.product: NVIDIA-L4
+      containers:
+      - name: vllm
+        image: REPLACE_WITH_VLLM_IMAGE_DIGEST
+        command:
+        - vllm
+        args:
+        - serve
+        - Qwen/Qwen2.5-0.5B-Instruct
+        - --revision
+        - 7ae557604adf67be50417f59c2c2f167def9a775
+        - --served-model-name
+        - week04-qwen2.5-0.5b
+        - --dtype
+        - bfloat16
+        - --host
+        - 0.0.0.0
+        - --port
+        - '8000'
+        - --max-model-len
+        - '4096'
+        - --max-num-seqs
+        - '16'
+        - --max-num-batched-tokens
+        - '4096'
+        - --gpu-memory-utilization
+        - '0.85'
+        - --enable-prefix-caching
+        - --enable-chunked-prefill
+        - --tensor-parallel-size
+        - '1'
+        - --pipeline-parallel-size
+        - '1'
+        env:
+        - name: VLLM_USE_V1
+          value: '1'
+        resources:
+          requests:
+            cpu: '4'
+            memory: 16Gi
+            nvidia.com/gpu: 1
+          limits:
+            cpu: '4'
+            memory: 16Gi
+            nvidia.com/gpu: 1
+        startupProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',
+              timeout=2)
+          failureThreshold: 180
+          periodSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',
+              timeout=2)
+          periodSeconds: 2
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - python
+              - -c
+              - import time; time.sleep(10)
+        volumeMounts:
+        - name: shm
+          mountPath: /dev/shm
+        - name: model-cache
+          mountPath: /root/.cache/huggingface
+        ports:
+        - name: engine-http
+          containerPort: 8000
+      - name: identity
+        image: REPLACE_WITH_PROXY_IMAGE_DIGEST
+        ports:
+        - name: http
+          containerPort: 8081
+        env:
+        - name: LOCAL_ENGINE
+          value: '1'
+        - name: LISTEN_HOST
+          value: 0.0.0.0
+        - name: PORT
+          value: '8081'
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 256Mi
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 2
+      volumes:
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 2Gi
+      - name: model-cache
+        emptyDir:
+          sizeLimit: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-direct
+  namespace: serving-lab
+  labels:
+    app.kubernetes.io/part-of: serving-study
+spec:
+  selector:
+    app: vllm
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-metrics
+  namespace: serving-lab
+  labels:
+    app.kubernetes.io/part-of: serving-study
+spec:
+  selector:
+    app: vllm
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 8000
+    targetPort: 8000
+---
+apiVersion: inference.networking.k8s.io/v1
+kind: InferencePool
+metadata:
+  name: vllm
+  namespace: serving-lab
+  labels:
+    app.kubernetes.io/part-of: serving-study
+spec:
+  selector:
+    matchLabels:
+      app: vllm
+  targetPorts:
+  - number: 8081
+  endpointPickerRef:
+    name: epp
+    port:
+      number: 9002
+    failureMode: FailClose
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: inference-platform
+  namespace: serving-lab
+  labels:
+    app.kubernetes.io/part-of: serving-study
+spec:
+  parentRefs:
+  - name: inference
+    sectionName: http
+  hostnames:
+  - inference.lab.invalid
+  rules:
+  - matches:
+    - path:
+        type: Exact
+        value: /v1/completions
+    backendRefs:
+    - group: inference.networking.k8s.io
+      kind: InferencePool
+      name: vllm
+      port: 8081

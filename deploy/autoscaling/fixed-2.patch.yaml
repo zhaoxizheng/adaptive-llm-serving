@@ -1,0 +1,8 @@
+# Strategic merge patch only; the runner uses the Deployment /scale subresource.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: serving-lab
+spec:
+  replicas: 2

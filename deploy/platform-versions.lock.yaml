@@ -1,0 +1,79 @@
+# Fill from fixed releases and reviewed rendered artifacts; never use moving main.
+schema_version: 1
+frozen: false
+gaie_release: v1.0.0
+kserve_api_version: null
+replicas_sync_disabled: false
+components:
+  reference_epp:
+    release: null
+    source_commit: null
+    images: []
+  llmd:
+    release: null
+    source_commit: null
+    images: []
+  kserve:
+    release: null
+    source_commit: null
+    images: []
+  adapter:
+    release: null
+    source_commit: null
+    images: []
+  keda:
+    release: null
+    source_commit: null
+    images: []
+artifacts:
+  adapter_values:
+    path: null
+    sha256: null
+  cache_identity:
+    path: null
+    sha256: null
+  compatibility:
+    path: null
+    sha256: null
+  conformance_job:
+    path: null
+    sha256: null
+  gaie_crds:
+    path: null
+    sha256: null
+  gateway_glue:
+    path: null
+    sha256: null
+  kserve_crds:
+    path: null
+    sha256: null
+  kserve_managed:
+    path: null
+    sha256: null
+  kserve_mutation:
+    path: null
+    sha256: null
+  kserve_referenced:
+    path: null
+    sha256: null
+  llmd_load:
+    path: null
+    sha256: null
+  llmd_prefix:
+    path: null
+    sha256: null
+  load_pipeline:
+    path: null
+    sha256: null
+  metric_rules:
+    path: null
+    sha256: null
+  metrics_scrape:
+    path: null
+    sha256: null
+  prefix_pipeline:
+    path: null
+    sha256: null
+  reference_epp:
+    path: null
+    sha256: null

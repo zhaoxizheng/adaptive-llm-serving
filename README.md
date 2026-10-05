@@ -43,10 +43,10 @@ weekly execution plans and reading lists:
 - [Week 14 execution plan](docs/week-14-plan.md), [references](docs/week-14-references.md), and [Chinese code walkthrough](docs/week-14-code-walkthrough.md)
 - [Week 15 execution plan](docs/week-15-plan.md), [references](docs/week-15-references.md), and [Chinese code walkthrough](docs/week-15-code-walkthrough.md)
 - [Week 16 execution plan](docs/week-16-plan.md), [references](docs/week-16-references.md), and [Chinese code walkthrough](docs/week-16-code-walkthrough.md)
-- [Week 17 execution plan](docs/week-17-plan.md) and [references](docs/week-17-references.md)
-- [Week 18 execution plan](docs/week-18-plan.md) and [references](docs/week-18-references.md)
-- [Week 19 execution plan](docs/week-19-plan.md) and [references](docs/week-19-references.md)
-- [Week 20 execution plan](docs/week-20-plan.md) and [references](docs/week-20-references.md)
+- [Week 17 execution plan](docs/week-17-plan.md), [references](docs/week-17-references.md), and [Chinese code walkthrough](docs/week-17-code-walkthrough.md)
+- [Week 18 execution plan](docs/week-18-plan.md), [references](docs/week-18-references.md), and [Chinese code walkthrough](docs/week-18-code-walkthrough.md)
+- [Week 19 execution plan](docs/week-19-plan.md), [references](docs/week-19-references.md), and [Chinese code walkthrough](docs/week-19-code-walkthrough.md)
+- [Week 20 execution plan](docs/week-20-plan.md), [references](docs/week-20-references.md), and [Chinese code walkthrough](docs/week-20-code-walkthrough.md)
 
 ### Weeks 16–20 Overview
 
@@ -307,6 +307,26 @@ generation/status checks, L7 cases, and backend-attribution/weight analysis.
 image digests and environment versions. GPU experiments, counter permissions, Kubernetes
 deployments, and controller capabilities have not been verified by generating this code.
 Cluster actions are explicit script modes; the plan/render modes do not access a cluster.
+
+## Weeks 17–20: Inference routing and platform control
+
+See the [Chinese runbook](docs/week-17-20-runbook.md) for the shared version/artifact lock,
+independent lab setup, per-cell execution and evidence contracts.
+
+```bash
+make plan-week17 plan-week18 plan-week19 plan-week20 PYTHON=python3.12
+python3.12 -m pytest -q tests/test_platform_contract.py tests/test_platform_analysis.py tests/test_platform_runner.py
+```
+
+The code provides GAIE InferencePool rendering and controlled EPP faults, paired llm-d
+workloads and cache-identity analysis, KServe UID ownership/deletion audits, and mutually
+exclusive HPA/KEDA handoffs with metric/timeline/cost analysis. Each week has a Chinese
+code walkthrough and an unfilled report.
+
+Version locks start unfrozen. Release-specific EPP/plugin/KServe declarations are supplied
+as reviewed artifacts with SHA-256 checksums; alpha fields and image digests are not
+invented. Cluster installation, official conformance, GPU performance and billing results
+remain unverified until the live experiments are executed. `--plan` is entirely offline.
 
 ## Experiment Contract
 

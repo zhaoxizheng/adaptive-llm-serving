@@ -1,0 +1,17 @@
+# Custom metrics Adapter values; KEDA owns external.metrics.k8s.io.
+rules:
+  default: false
+  custom:
+  - seriesQuery: serving_lab:queue_total{namespace="serving-lab",workload="vllm"}
+    resources:
+      overrides:
+        namespace:
+          resource: namespace
+        workload:
+          resource: deployment
+    name:
+      matches: ^serving_lab:queue_total$
+      as: inference_queue
+    metricsQuery: <<.Series>>{<<.LabelMatchers>>} and (time() - timestamp(<<.Series>>{<<.LabelMatchers>>})
+      < 30)
+  external: []

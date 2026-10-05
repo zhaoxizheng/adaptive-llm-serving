@@ -1,0 +1,25 @@
+# Prometheus rule file; bind and verify scrape label identities before deployment.
+groups:
+- name: serving-study
+  interval: 5s
+  rules:
+  - record: serving_lab:queue_total
+    expr: 'sum by(namespace,workload) (((vllm:num_requests_waiting{namespace="serving-lab",workload="vllm",model_name="week04-qwen2.5-0.5b"}
+      and (time() - timestamp(vllm:num_requests_waiting{namespace="serving-lab",workload="vllm",model_name="week04-qwen2.5-0.5b"})
+      < 30)) and on(namespace,pod) (kube_pod_status_ready{namespace="serving-lab",condition="true",pod=~"vllm-.*"}
+      == 1 and (time() - timestamp(kube_pod_status_ready{namespace="serving-lab",condition="true",pod=~"vllm-.*"})
+      < 30)) and on(namespace,pod) (count by(namespace,pod) ((vllm:num_requests_waiting{namespace="serving-lab",workload="vllm",model_name="week04-qwen2.5-0.5b"}
+      and (time() - timestamp(vllm:num_requests_waiting{namespace="serving-lab",workload="vllm",model_name="week04-qwen2.5-0.5b"})
+      < 30))) == 1)))
+
+      and on(namespace)
+
+      (count by(namespace) (((vllm:num_requests_waiting{namespace="serving-lab",workload="vllm",model_name="week04-qwen2.5-0.5b"}
+      and (time() - timestamp(vllm:num_requests_waiting{namespace="serving-lab",workload="vllm",model_name="week04-qwen2.5-0.5b"})
+      < 30)) and on(namespace,pod) (kube_pod_status_ready{namespace="serving-lab",condition="true",pod=~"vllm-.*"}
+      == 1 and (time() - timestamp(kube_pod_status_ready{namespace="serving-lab",condition="true",pod=~"vllm-.*"})
+      < 30)) and on(namespace,pod) (count by(namespace,pod) ((vllm:num_requests_waiting{namespace="serving-lab",workload="vllm",model_name="week04-qwen2.5-0.5b"}
+      and (time() - timestamp(vllm:num_requests_waiting{namespace="serving-lab",workload="vllm",model_name="week04-qwen2.5-0.5b"})
+      < 30))) == 1))) == count by(namespace) ((kube_pod_status_ready{namespace="serving-lab",condition="true",pod=~"vllm-.*"}
+      == 1 and (time() - timestamp(kube_pod_status_ready{namespace="serving-lab",condition="true",pod=~"vllm-.*"})
+      < 30))))'

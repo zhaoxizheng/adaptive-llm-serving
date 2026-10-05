@@ -378,8 +378,8 @@ Kubernetes 基础已经掌握，本阶段不再学习 Pod、Deployment、Service
 
 - Week 16：Gateway API v1 L7 Baseline，用 `GatewayClass`、`Gateway` 和 `HTTPRoute` 建立可审计的 matching、traffic splitting、streaming 与请求归属基线（[计划](week-16-plan.md) / [资料](week-16-references.md)）。
 - Week 16 实现与中文导读：[L7 路由代码](week-16-code-walkthrough.md) / [Gateway contract](gateway-api-contract.md)；真实 controller 与 GPU 验收仍需执行。
-- Week 17：GAIE `InferencePool` v1 与 Reference EPP，验证 `InferencePool`、reference EPP/ext-proc 数据路径、失败策略与 conformance 边界（[计划](week-17-plan.md) / [资料](week-17-references.md)）。
-- Week 18：llm-d Router/EPP：Load-aware 与 Precise Prefix-aware Routing；固定双副本对比两种策略，并验证 locality、load、metric freshness 与 staleness 边界（[计划](week-18-plan.md) / [资料](week-18-references.md)）。
+- Week 17：GAIE `InferencePool` v1 与 Reference EPP，验证 `InferencePool`、reference EPP/ext-proc 数据路径、失败策略与 conformance 边界（[计划](week-17-plan.md) / [资料](week-17-references.md) / [中文代码导读](week-17-code-walkthrough.md)）。
+- Week 18：llm-d Router/EPP：Load-aware 与 Precise Prefix-aware Routing；固定双副本对比两种策略，并验证 locality、load、metric freshness 与 staleness 边界（[计划](week-18-plan.md) / [资料](week-18-references.md) / [中文代码导读](week-18-code-walkthrough.md)）。
 
 三周始终固定 vLLM image、模型、双副本资源和 workload。Week 16 只建立通用 L7 基线，Week 17 只引入标准 endpoint-selection contract，Week 18 只替换 EPP 实现；不在同一个 A/B 中同时改变 gateway、EPP、replica 数和模型配置。
 
@@ -417,8 +417,12 @@ vLLM replica
 
 ### 每周主线
 
-- Week 19：KServe `LLMInferenceService` 声明式控制面与资源审计；固定 release，保存 alpha CRD schema、controller 生成对象、reconciliation、升级和回退证据（[计划](week-19-plan.md) / [资料](week-19-references.md)）。
-- Week 20：HPA/KEDA 扩缩容与可观测性；固定 router，校准 metric contract，分解 cold-start timeline，并比较 allocated 与 billed GPU-hours（[计划](week-20-plan.md) / [资料](week-20-references.md)）。
+- Week 19：KServe `LLMInferenceService` 声明式控制面与资源审计；固定 release，保存 alpha CRD schema、controller 生成对象、reconciliation、升级和回退证据（[计划](week-19-plan.md) / [资料](week-19-references.md) / [中文代码导读](week-19-code-walkthrough.md)）。
+- Week 20：HPA/KEDA 扩缩容与可观测性；固定 router，校准 metric contract，分解 cold-start timeline，并比较 allocated 与 billed GPU-hours（[计划](week-20-plan.md) / [资料](week-20-references.md) / [中文代码导读](week-20-code-walkthrough.md)）。
+
+第 17–20 周实验代码、配置、分析器和中文导读已提供；统一运行方法见
+[代码运行手册](week-17-20-runbook.md)。模板版本锁尚未冻结，真实 GPU、CRD/controller、
+conformance 与成本结果须执行后验收，不能由代码生成代替。
 
 KServe 是可选控制面，不取代 Week 16–18 的 portable data-plane contract。`LLMInferenceService` 当前仍是 alpha API；任何 `apiVersion`、生成资源和 upgrade 行为都以 Week 19 固定 release 的已安装 CRD 为准。Week 20 的通用 autoscaling 实验使用 vLLM `Deployment` 作为共同 `/scale` target，并且只能选择独立 HPA 或 KEDA `ScaledObject` 其中一条扩缩容路径，不能让两个 controller 或 GitOps/manual loop 同时修改副本数。
 

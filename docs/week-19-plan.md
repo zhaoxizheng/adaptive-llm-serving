@@ -4,7 +4,9 @@
 >
 > 本周主线：固定一个 KServe release，在独立集群实测当前仍属 alpha 的 `LLMInferenceService` API，追踪声明如何展开为 Gateway API、GAIE 与 workload 资源，并把所有权、状态和删除边界写成可审计 contract。
 >
-> 前置：[Week 15 plan](week-15-plan.md) 的 Kubernetes 双副本基线、[Week 18 plan](week-18-plan.md) 的 cache-aware 路由证据；阅读：[Week 19 references](week-19-references.md)。下列文件均为计划产出，不代表仓库已经实现或集群已经创建。
+> 前置：[Week 15 plan](week-15-plan.md) 的 Kubernetes 双副本基线、[Week 18 plan](week-18-plan.md) 的 cache-aware 路由证据；阅读：[Week 19 references](week-19-references.md)。下列交付项包含已提供的实验工具和待验收的 runtime artifacts，不代表集群已经创建。
+
+> 实现入口：[Week 19 中文代码导读](week-19-code-walkthrough.md)、[统一运行手册](week-17-20-runbook.md)。实验工具、配置和报告模板已提供；release-specific 输入与真实集群/GPU 结果仍需准备和验收。
 
 ## 本周目标
 

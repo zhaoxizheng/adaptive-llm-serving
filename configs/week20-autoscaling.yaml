@@ -1,0 +1,111 @@
+schema_version: 1
+baseline: configs/serving-platform-baseline.yaml
+cluster_lock: configs/cluster-lab.yaml
+versions_lock: deploy/platform-versions.lock.yaml
+seed: 20261004
+repeats: 3
+requests: 120
+max_inflight: 32
+timeout_seconds: 120
+max_run_seconds: 900
+sample_seconds: 5
+ready_timeout_seconds: 900
+warmup_requests: 3
+prefix_families: 4
+shared_tokens: 512
+shapes:
+  short:
+    prompt_tokens: 128
+    output_tokens: 32
+  long:
+    prompt_tokens: 2048
+    output_tokens: 256
+  shared:
+    prompt_tokens: 768
+    output_tokens: 32
+rates:
+  low: 1.0
+  near_slo: null
+cache_states:
+- cold
+target: vllm
+gateway_name: inference
+hostname: inference.lab.invalid
+endpoint: http://127.0.0.1:8080/v1/completions
+pool:
+  name: vllm
+  target_port: 8081
+  epp_service: epp
+  epp_port: 9002
+epp_deployment: epp
+audit_resources:
+- pods
+- services
+- configmaps
+- deployments.apps
+- replicasets.apps
+- endpointslices.discovery.k8s.io
+- horizontalpodautoscalers.autoscaling
+- events
+- gateways.gateway.networking.k8s.io
+- httproutes.gateway.networking.k8s.io
+- inferencepools.inference.networking.k8s.io
+- scaledobjects.keda.sh
+- llminferenceservices.serving.kserve.io
+- llminferenceserviceconfigs.serving.kserve.io
+week: 20
+output_root: results/week20
+workloads:
+- burst
+- ramp
+- short_burst
+- drain
+required_artifacts:
+- compatibility
+- gaie_crds
+- adapter_values
+- metric_rules
+- metrics_scrape
+- llmd_load
+polling_seconds: 15
+cooldown_seconds: 120
+metric:
+  exposed_name: inference_queue
+  threshold: 4
+  calibration_evidence: null
+  prometheus_url: http://prometheus.serving-lab.svc:9090
+  local_query_url: http://127.0.0.1:9090
+  query: serving_lab:queue_total{namespace="serving-lab",workload="vllm"}
+  max_age_seconds: 30
+  unit: requests
+  aggregation: workload_total
+  target_type: AverageValue
+cases:
+  fixed_1: {}
+  fixed_2: {}
+  hpa: {}
+  keda: {}
+  prometheus_outage:
+    mode: hpa
+    fault: prometheus_outage
+  adapter_outage:
+    mode: hpa
+    fault: adapter_outage
+  keda_scaler_outage:
+    mode: keda
+    fault: keda_scaler_outage
+  keda_metrics_outage:
+    mode: keda
+    fault: keda_metrics_outage
+  empty_metric:
+    mode: hpa
+    fault: empty_metric
+  stale_metric:
+    mode: hpa
+    fault: stale_metric
+  multiple_series:
+    mode: hpa
+    fault: multiple_series
+  malformed_metric:
+    mode: hpa
+    fault: malformed_metric

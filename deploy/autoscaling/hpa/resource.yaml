@@ -1,0 +1,32 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vllm-pressure
+  namespace: serving-lab
+  labels:
+    app.kubernetes.io/part-of: serving-study
+spec:
+  scaleTargetRef: &id001
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vllm
+  minReplicas: 1
+  maxReplicas: 2
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+    scaleDown:
+      stabilizationWindowSeconds: 120
+  metrics:
+  - type: Object
+    object:
+      describedObject: *id001
+      metric:
+        name: inference_queue
+        selector:
+          matchLabels:
+            namespace: serving-lab
+            workload: vllm
+      target:
+        type: AverageValue
+        averageValue: '4'

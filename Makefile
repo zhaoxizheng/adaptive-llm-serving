@@ -148,3 +148,17 @@ plan-week15 plan-week16:
 run-week13 run-week14:
 	$(VLLM_PYTHON) -m scripts.run_serving_experiment --config $(WEEK$(patsubst run-week%,%,$@)_CONFIG) --run
 
+
+# Weeks 17-20: offline plans; runtime operations are explicit script flags.
+WEEK17_CONFIG ?= configs/week17-inferencepool.yaml
+WEEK18_CONFIG ?= configs/week18-routing.yaml
+WEEK19_CONFIG ?= configs/week19-resource-audit.yaml
+WEEK20_CONFIG ?= configs/week20-autoscaling.yaml
+
+.PHONY: plan-week17 plan-week18 plan-week19 plan-week20 test-platform
+
+plan-week17 plan-week18 plan-week19 plan-week20:
+	$(PYTHON) -m scripts.run_platform_study --config $(WEEK$(patsubst plan-week%,%,$@)_CONFIG) --plan
+
+test-platform:
+	$(PYTHON) -m pytest -q tests/test_platform_contract.py tests/test_platform_analysis.py tests/test_platform_runner.py
