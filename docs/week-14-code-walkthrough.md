@@ -74,7 +74,62 @@ python3.12 -m scripts.verify_replica_shape --pod pod.json --ranks ranks.json \
   --gpus 2 --output results/week14/tp-shape-verification.json
 ```
 
-## 5. 统计与选择
+## 5. 核心代码精读
+
+### TP 的一次 all-reduce 到底在合并什么
+
+固定 vLLM `v0.10.2 / 01efc7ef781391e744ed08c3292817a773d654e6` 的 `RowParallelLinear.forward()`
+展示了单层 TP 的核心，不需要先从通信 backend 的所有文件开始读：
+
+源码：[vllm/model_executor/layers/linear.py](https://github.com/vllm-project/vllm/blob/01efc7ef781391e744ed08c3292817a773d654e6/vllm/model_executor/layers/linear.py#L1307-L1328)，第 1307–1328 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+if self.input_is_parallel:
+    input_parallel = input_
+else:
+    splitted_input = split_tensor_along_last_dim(
+        input_, num_partitions=self.tp_size)
+    input_parallel = splitted_input[self.tp_rank].contiguous()
+
+# Matrix multiply.
+assert self.quant_method is not None
+# Only fuse bias add into GEMM for rank 0 (this ensures that
+# bias will not get added more than once in TP>1 case)
+bias_ = None if (self.tp_rank > 0 or self.skip_bias_add) else self.bias
+output_parallel = self.quant_method.apply(self,
+                                          input_parallel,
+                                          bias=bias_)
+if self.reduce_results and self.tp_size > 1:
+    output = tensor_model_parallel_all_reduce(output_parallel)
+else:
+    output = output_parallel
+
+output_bias = self.bias if self.skip_bias_add else None
+```
+
+若上游已经产出各 rank 的输入 shard，直接使用；否则沿最后一维切分并选择本 rank。
+每个 rank 用自己的权重分片计算一个局部结果；`reduce_results` 且 `TP>1` 时再求和，
+得到完整输出。这里 all-reduce 合并的是同一请求同一层的部分和，不是把两组独立请求
+的结果拼起来。
+
+用标量输出手算：`x=[1,2,3,4]`、`w=[10,20,30,40]`，TP=2 时 rank0 得50，rank1
+得250，求和为300。若 bias=5，只在一个 rank 的局部结果里加，最终为305；两个 rank
+都加会错误地得到310。代码的 `bias_` 分支正是避免重复加 bias；`skip_bias_add` 为
+后续融合保留单独返回 bias 的路径。
+
+**设计取舍与边界。** TP 减少每卡权重/计算，但增加通信和同步；小 batch decode 的
+收益可能被 all-reduce 开销抵消。`reduce_results=False` 的调用方要自己满足后续
+分片语义，不能随意删掉通信当作优化。attention/QKV 的分片还取决于 heads 和模型
+结构，不能用一个 linear 例子声称每种张量都简单均分。
+
+实验仍限定一个 replica 的全部 ranks 在同一个 node：`G GPUs, TP=G, PP=1`。
+比较 `1×TP=2` 与 `2×TP=1` 时，前者协同执行同一请求，后者由 router 分配独立请求；
+扩缩容只改变完整 replica 数。总 GPU 数应按 `replicas × G` 计算。
+
+**读后自检。** 为什么 TP=2 的单副本吞吐不到 TP=1 的两倍不一定是 bug？如果 profile
+显示 all-reduce 等待增多，应该先核对哪些 shape、链路和 rank 条件？
+
+## 6. 统计与选择
 
 `summary.json` 给出全部请求和 `by_workload`，失败不会从分母消失。`eligible` 只检查
 请求错误率与客户端 arrival lag，它是必要条件，不是最终选择结论。请继续检查各组
@@ -84,7 +139,7 @@ TTFT/TPOT SLO、质量、OOM/preemption、显存和重复间波动。
 它拒绝显式标记为 profiler 的输入，生成 TTFT 图和 runs.csv。Pareto 选择由报告给出，
 不自动覆盖 `serving-baseline.yaml`。
 
-## 6. 命令
+## 7. 命令
 
 ```bash
 make plan-week14 PYTHON=python3.12
@@ -98,7 +153,7 @@ python3.12 -m src.analyze_serving_study --root results/week14 --output results/w
 结果保留 `server.log`、serve help、runtime topology、GPU series、逐请求输出摘要和
 `allocated_gpu_seconds`。这个成本包含本地 server 启动/预热/测量/清理，VM 空闲费用需补录。
 
-## 7. 冻结下游 baseline
+## 8. 冻结下游 baseline
 
 在 [serving-baseline.yaml](../configs/serving-baseline.yaml) 填入已验证的模型/engine
 配置、SLO、near-SLO RPS、GPU topology、image digest、`gpus_per_replica=G` 与 `TP=G`。

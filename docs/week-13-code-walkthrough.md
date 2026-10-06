@@ -43,7 +43,77 @@ server 无法直接复现 application replay，因此 runner 明确拒绝该模�
 两个不同 launch 的 duration 不能直接平均后声称容量提升；低 occupancy 也不会触发
 自动“瓶颈”结论。请把 counter 与原 shape、timeline 和可反驳的假设一起解释。
 
-## 4. A/B/C/D 如何共用请求
+## 4. 核心代码精读
+
+### Prefix 全命中时，为什么还要算最后一部分
+
+阅读固定 vLLM `v0.10.2 / 01efc7ef781391e744ed08c3292817a773d654e6` 的 `get_computed_blocks()`：
+
+源码：[vllm/v1/core/kv_cache_manager.py](https://github.com/vllm-project/vllm/blob/01efc7ef781391e744ed08c3292817a773d654e6/vllm/v1/core/kv_cache_manager.py#L166-L182)，第 166–182 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+# Prefix caching is disabled or
+# When the request requires prompt logprobs, we skip prefix caching.
+if (not self.enable_caching
+        or (request.sampling_params is not None
+            and request.sampling_params.prompt_logprobs is not None)):
+    return self.create_empty_block_list(), 0
+
+# NOTE: When all tokens hit the cache, we must recompute the last token
+# to obtain logits. Thus, set max_cache_hit_length to prompt_length - 1.
+# This can trigger recomputation of an entire block, rather than just
+# the single last token, because allocate_slots() requires
+# num_computed_tokens to be block-size aligned. Removing this limitation
+# could slightly improve performance in the future.
+max_cache_hit_length = request.num_tokens - 1
+computed_blocks, num_new_computed_tokens = (
+    self.coordinator.find_longest_cache_hit(request.block_hashes,
+                                            max_cache_hit_length))
+```
+
+禁用 APC 或需要 prompt logprobs 时返回零命中。普通路径把查找上限设为
+`request.num_tokens - 1`，因为 KV cache 保存的是 K/V，不保存这次生成所需的末位
+logits。命中还按完整 block 对齐，因此可能需要重算最后一个完整 block。
+
+假设 block size=16、prompt 长度32，且两个 blocks 都曾缓存：上限31最多允许复用
+第一个完整 block 的16 tokens，剩余16仍需计算；prompt 长度33时，上限32可以复用
+前32 tokens，只计算最后1个。该固定实现的对齐条件解释了为什么相差1个 token 的
+全前缀命中请求，其剩余 prefill 工作量也可能明显不同。
+
+### NCU 捕获控制怎样保护“只观察一个热点”的含义
+
+源码：[scripts/run_kernel_study.py](../scripts/run_kernel_study.py)，第 19–31 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+def ncu_command(cfg, root):
+    ncu, target = cfg["ncu"], cfg["target"]
+    if ncu["launch_count"] < 1 or ncu["launch_count"] > 16 or ncu["launch_skip"] < 0:
+        raise ValueError("counter capture must select 1-16 launches")
+    if ncu["replay_mode"] not in {"kernel", "application"}:
+        raise ValueError("unsupported replay mode")
+    if ncu["replay_mode"] == "application":
+        raise ValueError("application replay cannot reproduce an externally driven server; use kernel replay")
+    argv = [ncu["binary"], "--target-processes", "all", "--profile-from-start", "off",
+            "--kernel-name", "regex:" + str(target["kernel_regex"]),
+            "--replay-mode", ncu["replay_mode"], "--cache-control", ncu["cache_control"],
+            "--clock-control", ncu["clock_control"], "--launch-skip", str(ncu["launch_skip"]),
+            "--launch-count", str(ncu["launch_count"]), "--export", str(root / "profile")]
+```
+
+先限制目标 launches 为1–16，拒绝无法复现外部 HTTP 驱动的 application replay；
+再把 regex、kernel replay、cache/clock control 显式放进 argv。一个 kernel 的
+counter 收集可能需要多次重放，不能把 profile run 的客户端耗时当作正常服务延迟。
+
+**设计取舍与边界。** APC 的收益应看剩余 prefill 工作量、TTFT 和实际 reuse；NCU
+用于解释具体 kernel 的计算/带宽/occupancy，而不是替代无 profiler 的容量实验。
+长 prompt 复用后少了某类 kernel，是工作量减少；同一 kernel 更快是执行效率变化，
+两种结论需要不同证据。理论 arithmetic intensity 也必须说明是否计入权重、KV 和
+中间张量，不能拿一个 FLOPs/byte 数字自动宣判瓶颈。
+
+**读后自检。** cache-hit counter 很高但 TTFT 改善有限时，除了缓存失效，还可能
+剩下哪些排队、重算或执行成本？prompt logprobs 为什么会改变这条源码路径？
+
+## 5. A/B/C/D 如何共用请求
 
 `trace_jobs()` 分开管理到达随机数、family prefix 随机数和 suffix 随机数。
 相同 seed/repeat/rate 产生相同到达序列；不同 repeat 使用不同到达序列。
@@ -61,7 +131,7 @@ server 无法直接复现 application replay，因此 runner 明确拒绝该模�
 completion，不经过 chat template，因此这里能控制首 token 不同；换成 chat completion
 时必须重新测量模板公共 tokens，不能沿用“零公共前缀”结论。
 
-## 5. `run_cell()` 的执行顺序
+## 6. `run_cell()` 的执行顺序
 
 ```text
 创建唯一 cell 目录，写 run.json / trace.json
@@ -82,7 +152,7 @@ counter 时间序列判断 cold→warm，而不是把整个 B run 称为全冷�
 不会被另一 rank 增长抵消。metric 名称与 token/block/request 单位必须按固定版本确认；
 配置 `definition` 为空时，摘要明确标记为未验证，不能直接发布 hit ratio。
 
-## 6. 请求统计如何处理失败
+## 7. 请求统计如何处理失败
 
 客户端必须收到内容、正确 usage、`finish_reason=length` 和 `[DONE]` 才判成功。
 线程池前有 semaphore；超过 `max_inflight` 的到达保存为 `client_overload`，不会无限排队
@@ -92,7 +162,7 @@ counter 时间序列判断 cold→warm，而不是把整个 B run 称为全冷�
 客户端从预定到达计算 TTFT，还保存 arrival lag；客户端先饱和的 run 被拒绝用于容量结论。
 原始输出只有合成数据，保留 hash/有限摘要供质量复核。
 
-## 7. 命令与结果
+## 8. 命令与结果
 
 ```bash
 make plan-week13 PYTHON=python3.12
@@ -108,7 +178,7 @@ ncu 结果在 `results/week13/ncu/SESSION/`；APC 结果在
 `results/week13/prefix/SESSION/rREPEAT-RATE-shared-CASE/`。没有实际执行时，这些目录不会
 由文档生成过程制造出来。
 
-## 8. 交给 Week 14
+## 9. 交给 Week 14
 
 交接热点假设、raw `.ncu-rep`、无 profiler baseline、cache 初始状态、近 SLO 到达速率，
 以及一个值得验证的 engine 参数。机制证据与用户延迟证据分别写入报告；没有性能收益

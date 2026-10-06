@@ -54,7 +54,53 @@ GatewayClass: serving-lab       controllerName 固定实现
 这些检查只能证明当前配置已被控制面接受，仍需流量验证；失败 cell 的 negative route
 可能预期 ResolvedRefs=False，应保留它的独立 status，不用它替代正常主 route 的 gate。
 
-## 5. 互斥规则如何避免歧义
+## 5. 核心代码精读
+
+### Ready 必须属于当前 spec，也必须属于正确 parent
+
+`current_conditions()` 是本周等待控制面收敛的关键判据：
+
+源码：[src/cluster_contract.py](../src/cluster_contract.py)，第 146–158 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+def current_conditions(resource, required, *, parent=None):
+    generation = resource["metadata"]["generation"]
+    if parent is None:
+        conditions = resource.get("status", {}).get("conditions", [])
+    else:
+        matches = [p for p in resource.get("status", {}).get("parents", [])
+                   if p.get("parentRef", {}).get("name") == parent
+                   and p.get("parentRef", {}).get("namespace", resource["metadata"].get("namespace")) == resource["metadata"].get("namespace")]
+        if len(matches) != 1:
+            return False
+        conditions = matches[0].get("conditions", [])
+    return all(any(c["type"] == kind and c["status"] == "True" and c.get("observedGeneration") == generation
+                   for c in conditions) for kind in required)
+```
+
+先读取对象当前 `metadata.generation`。Gateway 直接检查顶层 conditions；HTTPRoute
+指定 parent 时，从 `status.parents` 找到该 Gateway 对应的记录，缺失或有歧义返回 False。
+最后的两层量词是“每个 required kind，都存在一个 True 且 generation 匹配的 condition”。
+
+例：HTTPRoute 已从 generation=7 改到 8，而 status 仍是 `Accepted=True,
+observedGeneration=7`。只检查 True 会在新路由尚未被处理时开始压测；该函数拒绝旧
+generation，等待 controller 对新 spec 给出条件。Accepted 与 ResolvedRefs 分别回答
+接受附着和引用解析，二者不能互相代替。
+
+**设计取舍与边界。** 本 helper 适配同 namespace、单一明确 parent 的实验模型。
+它并没有完整比较 `controllerName`、`sectionName` 等所有 parent identity 字段；
+扩展到多 listener、多 controller 或跨 namespace 前必须扩充匹配规则。
+即使条件全部通过，也要沿 listener → HTTPRoute match → backendRef → Ready endpoint
+跑 generation/streaming smoke；status 不能证明实际流量命中了预期 rule。
+
+再对照 `gateway_resources()`：同一 match 内 path 与 header 是 AND，不同 matches
+为候选匹配项；backendRefs 的 weight 是相对比例，不是严格轮转顺序。90/10 不能套用
+Week 15 的 A/B sequence 验证，更不能从 client header 直接伪造实际 route attribution。
+
+**读后自检。** 刚修改 backendRef 后哪些旧 conditions 会看似正常？如果一个 Route
+附着两个 parents，为什么不能只取 `status.parents[0]`？
+
+## 6. 互斥规则如何避免歧义
 
 正常规则都匹配 exact `/v1/completions`，再匹配不同的 `X-Lab-Case`：
 
@@ -71,7 +117,7 @@ GatewayClass: serving-lab       controllerName 固定实现
 实验当成同一种失败。判断“无后端命中”时需要完整的 gateway/identity 日志窗口，HTTP
 错误本身不足以证明请求没有到达模型。
 
-## 6. 权重为何不要求精确 900/100
+## 7. 权重为何不要求精确 900/100
 
 `weight_verdict()` 固定使用至少 1000 个请求和 99.9% Wilson interval。预期比例在区间内
 记为 compatible，小样本记为 insufficient_samples。99.9% 是本仓库预先选择的实验规则，
@@ -84,7 +130,7 @@ GatewayClass: serving-lab       controllerName 固定实现
 标为 `incomplete_or_retried_attribution`，不把最终成功 backend 当成全部选择历史。
 request 数比例与 token workload 比例也分别分析。
 
-## 7. Runtime attribution 的边界
+## 8. Runtime attribution 的边界
 
 identity proxy 给出 request ID、backend Pod UID 与本跳 attempt；它看不到 controller
 实际选中的 HTTPRoute/rule。`analyze_routing` 会报告 `route_attribution_missing`，不会
@@ -94,7 +140,7 @@ identity proxy 给出 request ID、backend Pod UID 与本跳 attempt；它看不
 保留 route_name/backend Service/Pod UID/attempt。分析时只输入同一层日志，避免把 gateway
 和 identity 两跳当成两次 retry。正式性能测量关闭高频 debug 后仍应保留最小 attribution。
 
-## 8. 命令
+## 9. 命令
 
 ```bash
 make plan-week16 PYTHON=python3.12
@@ -117,7 +163,7 @@ python3.12 -m src.analyze_routing \
 保留每组独立 repeat；默认入口不会自动在多个 controller 路由之间切换或创建外部入口。
 直连 case 默认使用 localhost:8082，先单独 port-forward backend Service。
 
-## 9. 交给 Week 17
+## 10. 交给 Week 17
 
 交接固定 CRD/controller release、主路由 manifests、双副本 shape、workload、SLO、
 连接路径、attribution schema、失败语义和原始结果。本周不引入 InferencePool/EPP/llm-d，

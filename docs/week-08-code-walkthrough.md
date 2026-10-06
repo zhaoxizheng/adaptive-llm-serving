@@ -36,7 +36,72 @@ decode 往往只需要补一个 token。不要把教学图里的“prefill 阶�
 先看 scenario 配置并手算前几步，再阅读 patch 的字段采样点，最后检查 parser 怎样验证
 你的手算。源码规则见独立 scheduler map，避免把 trace schema 当作算法定义。
 
-## 3. Patch 放在什么位置
+## 3. 核心代码精读
+
+### Scheduler 怎样把请求进度转成本轮 token 数
+
+固定源码为 vLLM `v0.10.2 / 01efc7ef781391e744ed08c3292817a773d654e6` 的 `Scheduler.schedule()`。
+先看 running 请求分支，普通 text-only、非 speculative 路径可把它理解为“已知 token
+数减去已计算 token 数”，再受本轮预算限制：
+
+源码：[vllm/v1/core/sched/scheduler.py](https://github.com/vllm-project/vllm/blob/01efc7ef781391e744ed08c3292817a773d654e6/vllm/v1/core/sched/scheduler.py#L211-L225)，第 211–225 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+num_new_tokens = (request.num_tokens_with_spec +
+                  request.num_output_placeholders -
+                  request.num_computed_tokens)
+if (0 < self.scheduler_config.long_prefill_token_threshold <
+        num_new_tokens):
+    num_new_tokens = (
+        self.scheduler_config.long_prefill_token_threshold)
+num_new_tokens = min(num_new_tokens, token_budget)
+
+# Make sure the input position does not exceed the max model len.
+# This is necessary when using spec decoding.
+num_new_tokens = min(
+    num_new_tokens,
+    self.max_model_len - 1 - request.num_computed_tokens)
+```
+
+`num_tokens_with_spec` 和 placeholders 保留对额外解码模式的支持；本周不能直接删除
+它们后声称复现全部算法。long-prefill threshold 可先裁一次，`token_budget` 再约束
+本步总工作量，最后限制模型最大位置。预算够用仍不保证可执行，还需 `allocate_slots()`
+成功；成功后才把数量写入 `num_scheduled_tokens` 并扣减 budget。
+
+手算：剩余 budget=4，先处理的 decode 请求欠 1 token，剩下 3；另一个 running 请求
+尚有 10 个 prompt tokens 未计算，本步最多拿 3。它的 prefill 被拆到后续 step，
+这就是在同一 token-budget 模型中容纳 decode 与 chunked prefill 的方式。
+
+### Preemption 为什么会带来重算
+
+源码：[vllm/v1/core/sched/scheduler.py](https://github.com/vllm-project/vllm/blob/01efc7ef781391e744ed08c3292817a773d654e6/vllm/v1/core/sched/scheduler.py#L271-L280)，第 271–280 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+self.kv_cache_manager.free(preempted_req)
+self.encoder_cache_manager.free(preempted_req)
+preempted_req.status = RequestStatus.PREEMPTED
+preempted_req.num_computed_tokens = 0
+if self.log_stats:
+    preempted_req.record_event(
+        EngineCoreEventType.PREEMPTED, scheduled_timestamp)
+
+self.waiting.prepend_request(preempted_req)
+preempted_reqs.append(preempted_req)
+```
+
+allocation 失败后，上文 policy 分支选择 victim；这里释放 KV/encoder cache，把状态
+改为 PREEMPTED，`num_computed_tokens` 清零，再放回 waiting 前端。输出 token 历史并
+没有因此被删除；恢复时必须重建与当前上下文对应的 KV，所以后续看到额外 prefill
+工作量不一定来自一个新请求。默认 FCFS 与 priority 的 victim 选择分支需分别阅读。
+
+**设计取舍与边界。** 减少本步 tokens 解决计算预算问题，释放 blocks 解决驻留容量
+问题，二者不能互相替代。waiting admission 失败不必发生 running preemption。
+trace 应在 decision 已产生而 computed 计数尚未推进的位置采样，才能手算本轮进度。
+
+**读后自检。** `max_num_seqs` 尚有余量但没有 free KV blocks 时能否 admit？一个请求
+出现两轮 prefill，如何区分正常 chunking 与 preemption 后重算？
+
+## 4. Patch 放在什么位置
 
 入口保存 `running_before`、`waiting_before` 和单调递增的 step 编号。算法自身完成后，
 在 `_update_after_schedule()` 增加 computed token 计数之前记录 `step` event。
@@ -57,7 +122,7 @@ scheduled = [
 路径可能进一步触发 preemption，waiting 路径也可能只是不 admit。只有 waiting 上升
 不足以证明 KV 压力，必须同时看 allocation 结果或明确的 preemption。
 
-## 4. 四个场景具体改变什么
+## 5. 四个场景具体改变什么
 
 | 场景 | 请求 | 改动 | 要寻找的证据 |
 |---|---|---|---|
@@ -74,7 +139,7 @@ size 和可用容量仍以启动日志为准，parser 不把这个估算当作�
 如果运行没有触发目标机制，分析保存 `not_observed_reason`，不会虚构 KV pressure。
 下一次只改变一个相关维度并保留独立 session。
 
-## 5. Parser 如何重建状态
+## 6. Parser 如何重建状态
 
 `load_events()` 合并同一场景的 PID 文件，按单机 monotonic timestamp 排序。schema
 错误、不完整 JSON 行和 `trace_truncated` 都会使解析失败。
@@ -101,7 +166,7 @@ stateDiagram-v2
 未经 resumed 就凭空正常完成；它要么再次运行，要么有明确 abort/error。默认要求最终
 所有请求 terminal，`--allow-partial` 只允许诊断中断 trace，不会补造结束事件。
 
-## 6. 每一步检查哪些 invariant
+## 7. 每一步检查哪些 invariant
 
 1. step 必须从 0 连续递增，避免合并了两次 server run 或漏掉事件。
 2. 同一步不能重复安排同一 request，也不能既 scheduled 又 preempted。
@@ -115,7 +180,7 @@ stateDiagram-v2
 speculative decoding、encoder inputs、LoRA、prefix-hit admission、异步调度等额外分支
 不在最小实验支持范围，新增这些条件前要相应扩充 schema 和验证规则。
 
-## 7. 怎样识别 chunked prefill
+## 8. 怎样识别 chunked prefill
 
 某个 scheduled entry 满足以下条件时，该步只完成了 prompt 的一部分：
 
@@ -132,7 +197,7 @@ scheduled=256，说明该步之后还剩 prompt 工作。下一步是否继续�
 小于最大 context 的 token budget 而强求启动成功。当前默认四场景不把这个可选对比
 当成已执行，也不自动为启动成功悄悄修改其他参数。
 
-## 8. 图表分别回答什么
+## 9. 图表分别回答什么
 
 - `request-state-timeline.png`：状态转换发生在哪个 step；它画事件，不表示该请求占满
   了两个事件之间所有 GPU 时间。
@@ -145,7 +210,7 @@ scheduled=256，说明该步之后还剩 prompt 工作。下一步是否继续�
 原始字段；client/server `/metrics` 快照也保留以便与 Week 5 指标对应。这是短时机制
 实验，不使用带 trace 的吞吐数与 Week 5/6 无 trace baseline 直接比较。
 
-## 9. 命令和结果目录
+## 10. 命令和结果目录
 
 Mac 预演：
 
@@ -179,7 +244,7 @@ python3.12 -m src.parse_scheduler_trace \
   --output results/week08/analysis/baseline
 ```
 
-## 10. 自测与 Week 9 交接
+## 11. 自测与 Week 9 交接
 
 [scheduler 测试](../tests/test_scheduler_study.py) 覆盖 budget overflow、sequence overflow、
 重复 step、坏 queue snapshot、finished 后重新调度、preempt 后未恢复和不完整日志。

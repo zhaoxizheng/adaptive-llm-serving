@@ -59,7 +59,57 @@ runner 必须看到完整 marker 才接受采集完成；请求提前结束导�
 一个执行 step，因此采用 wait=0/warmup=0/active=1，依赖前面的三轮模型预热；它仍有
 profiler 首次采集开销，必须读 paired baseline，不能把这次样本当作准确延迟基线。
 
-## 4. 四个窗口如何选
+## 4. 核心代码精读
+
+### Profiler 的时钟是 execute step，不是 HTTP request
+
+`Capture.before()` 判断当前 index 是否位于 active 窗口，`after()` 在一次实际执行
+之后推进 index。关键结束逻辑如下：
+
+源码：[scripts/execution_trace_payload.py](../scripts/execution_trace_payload.py)，第 199–217 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+def after(self):
+    import torch
+
+    self.index += 1
+    if self.profiler is not None:
+        self.profiler.step()
+    if self.index == self.cfg["wait"] + self.cfg["warmup"] + self.cfg["active"]:
+        if self.profiler is not None:
+            self.profiler.stop()
+        else:
+            torch.cuda.synchronize()
+            torch.cuda.profiler.stop()
+        self.done = True
+        root = Path(self.cfg["output"])
+        (root / f"capture-{os.getpid()}.json").write_text(
+            json.dumps(
+                dict(complete=True, active_steps=self.steps, config=self.cfg, pid=os.getpid())
+            )
+        )
+```
+
+先加一再 `profiler.step()`，使这次完成的 model execution 落入对应 schedule step。
+当 index 等于 `wait + warmup + active` 时才停止并写 complete marker。
+`active_steps` 保存 scheduler 传来的 step ID；它不等于从 0 开始的 capture index。
+
+手算 wait=2、warmup=2、active=3：进入 execute 前的 index 0、1 为 wait，2、3 为
+profiler warmup，4、5、6 为 active；第 7 次执行后的 index=7 才完成。若 workload
+只有 5 个 execute，marker 不完整是正确结果，不能靠 HTTP 请求全部成功推断采集完成。
+
+继续读装饰器 `execution()`：只有被包装方法正常返回后才调用 `after()`；`finally`
+负责恢复 step context。forward 抛异常时不会用一个递增计数掩盖失败。完整 marker
+仍不能单独证明每个客户端请求成功，必须与 client 结果和 active step 组成一起判断。
+
+**设计取舍与边界。** `record_shapes` 有利于把同名算子按输入拆开，但可能增加开销和
+对象存活时间；`self_cpu_time_total` 排除子调用，`cpu_time_total` 包含它们。不能把所有
+total 列累加成请求墙钟时间，也不能仅凭 CPU 的大耗时行认定 GPU kernel 慢。
+
+**读后自检。** 一个输出 256 tokens 的请求为什么可能覆盖很多 profiler steps？
+如果 mixed 请求在 active 窗口结束后才被调度，怎样从 `active_steps` 识别无效采样？
+
+## 5. 四个窗口如何选
 
 | 场景 | 输入 / 输出 | wait / warmup / active | 验证重点 |
 |---|---|---|---|
@@ -72,7 +122,7 @@ profiler 首次采集开销，必须读 paired baseline，不能把这次样本�
 `active_steps` 中判断目标机制；mixed 没落在窗口里时结果为 `not_observed`，需要记录
 原因、调整一个窗口或到达参数后重新采集，不能改名称掩盖窗口未命中。
 
-## 5. 导出两份互补证据
+## 6. 导出两份互补证据
 
 `Capture.export()` 保存 `torch-PID.json` Chrome trace，同时直接从 PyTorch
 `key_averages(group_by_input_shape=...)` 导出 `operators-PID.json`。
@@ -93,7 +143,7 @@ union busy 是 15us，不是 20us。即便这样，busy 也不等于 request lat
 `synchronization.csv` 提取名称含 `Synchronize` 的显式 CUDA API。隐式 blocking copy、
 CPU tensor 读取等仍需看完整 trace，不能因为该表为空就宣布没有同步。
 
-## 6. Baseline/profile pair 怎样验证
+## 7. Baseline/profile pair 怎样验证
 
 两次服务使用同一 command、GPU/software runtime、jobs 和 seed。`paired_metrics()`
 先比较 request ID、prompt fingerprint 和 output token 数，失败或不匹配的 run 不能
@@ -112,7 +162,7 @@ instrumentation 扰动的一部分。一次短 pair 的比例可能受随机波�
 应结合 Week 10 的同 workload composition 与低频 metrics 核对；扰动明显或证据不足
 时，仅用 profile 解释路径，不据此给生产耗时占比或容量结论。
 
-## 7. 命令和文件
+## 8. 命令和文件
 
 已完成 Week 10 patch 的 VM：
 
@@ -135,7 +185,7 @@ python3.12 -m src.summarize_torch_profile \
 该离线命令只需要普通 Python。原始 trace 可以在支持 Chrome trace 的查看器中打开，
 使用 `study/prepare/step=N`、`study/forward/step=N` 等标记与 `shapes.csv` 对齐。
 
-## 8. 三个假设怎样写结论
+## 9. 三个假设怎样写结论
 
 每个假设记录 Prediction、operator/trace evidence、baseline overhead、Decision 和
 反证。Decision 只能来自本次采集，可为 supported/rejected/inconclusive。

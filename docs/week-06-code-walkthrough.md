@@ -59,7 +59,56 @@ AWQ 使用 FP16 compute，因此这是“可用部署表示”的对比，不能
 所选 Python 同目录下的 vLLM CLI，防止 `.venv-vllm/bin/python` 却误启动 PATH 中的另一个
 vLLM。每个候选结束都会释放本次拥有的进程组，然后才启动下一个。
 
-## 4. load_handoff 怎样防止比较条件漂移
+## 4. 核心代码精读
+
+### AWQ 权重更小，为什么执行路径却可能不同
+
+下面精读 vLLM `v0.10.2`、commit `01efc7ef781391e744ed08c3292817a773d654e6` 的 `AWQLinearMethod.apply()`。
+它是普通 AWQ linear 的阅读样本；实际运行可能选择 AWQ-Marlin 等其他实现，须先从
+启动日志和 quantization 配置确认 backend，再把 profile 对到对应源码。
+
+源码：[vllm/model_executor/layers/quantization/awq.py](https://github.com/vllm-project/vllm/blob/01efc7ef781391e744ed08c3292817a773d654e6/vllm/model_executor/layers/quantization/awq.py#L210-L228)，第 210–228 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+qweight = layer.qweight
+scales = layer.scales
+qzeros = layer.qzeros
+pack_factor = self.quant_config.pack_factor
+out_shape = (x.shape[:-1] + (qweight.shape[-1] * pack_factor, ))
+reshaped_x = x.reshape(-1, x.shape[-1])
+
+# num_tokens >= threshold
+FP16_MATMUL_HEURISTIC_CONDITION = x.shape[:-1].numel() >= 256
+
+if FP16_MATMUL_HEURISTIC_CONDITION:
+    out = ops.awq_dequantize(qweight, scales, qzeros, 0, 0, 0)
+    out = torch.matmul(reshaped_x, out)
+else:
+    out = ops.awq_gemm(reshaped_x, qweight, scales, qzeros,
+                       pack_factor)
+if bias is not None:
+    out.add_(bias)
+return out.reshape(out_shape)
+```
+
+`qweight` 是打包后的低 bit 权重，`scales/qzeros` 保存反量化参数；`pack_factor` 把打包
+维度还原成逻辑输出维度。`reshape(-1, hidden)` 将前面的 batch/token 维压成矩阵行，
+所以这里的 `num_tokens` 是参与这次 linear 的总行数，不是 HTTP 请求个数。
+
+阈值分支很值得在 profiler 中找：这个版本在行数至少 256 时先反量化再 `matmul`，
+更小的输入走 `awq_gemm`。长 prefill 与单步 decode 可能走不同 kernel，因此不能从
+“4 bit 权重更小”直接推导两类延迟都会按相同比例下降。256 是该实现的 heuristic，
+不是 AWQ 算法的通用常数，也不能移植到另一个 backend。
+
+**设计取舍与边界。** 权重压缩降低读取量，却引入解包/反量化、group scale、kernel
+选择和潜在的临时 tensor 成本。Weight-only quantization 不会自动把 KV cache 也改成
+4 bit。模型质量、权重显存、KV 容量和请求 goodput 应分别验证。
+
+**读后自检。** 同样 32 个请求，每请求本步 1 token 与每请求本步 16 tokens，在这个
+函数里分别有多少矩阵行、可能走哪个分支？真实运行若显示 Marlin，为什么不能用这段
+heuristic 直接解释测量结果？
+
+## 5. load_handoff 怎样防止比较条件漂移
 
 `load_handoff()` 要求 Week 5 的 `ready=true`，核对当前 Week 5 配置与保存配置的完整
 fingerprint，并验证 baseline server argv。每个启动的候选还会与 Week 5 的 GPU/runtime
@@ -69,7 +118,7 @@ fingerprint，并验证 baseline server argv。每个启动的候选还会与 We
 共同的 workload、handoff、模型集合、tokenizer、代码文件和 runtime 必须保持一致。
 失败的 variant 留在 `cells` 中，不作为可比较性能候选。
 
-## 5. 输出验证先于性能测量
+## 6. 输出验证先于性能测量
 
 [week06-quality.json](../configs/week06-quality.json) 固定了 24 条小型样例：算术、中英文、
 JSON、长上下文抽取，以及靠近 context 上限的输入。模板通过固定 tokenizer 的
@@ -91,7 +140,7 @@ JSON、长上下文抽取，以及靠近 context 上限的输入。模板通过�
 `manual_review` 初始为 `pending`；检查输出后再将相应 evidence 标为 `passed`，最终
 operating point gate 才能通过。不要直接批量改标记来绕过质量核对。
 
-## 6. phase_candidates 怎样限制实验变量
+## 7. phase_candidates 怎样限制实验变量
 
 `representation` 返回 BF16 和 AWQ，各自运行四类 mixture、三个负载点和三次重复。
 其他调参阶段主要在 mixed workload 上运行：
@@ -112,7 +161,7 @@ memory 阶段要求给出已保存的 KV pressure evidence 文件。它改变显
 的三个负载点、三次重复，并在 boundary 点执行默认 1200 秒 soak。这个 fallback 有
 自己的实测证据，不能只因为“配置看起来保守”就称它已验证。
 
-## 7. 分析器如何选配置
+## 8. 分析器如何选配置
 
 每轮首先复用 Week 5 的 `analyze_run()`。`confirm_cell()` 进一步检查：
 
@@ -139,7 +188,7 @@ USD / 1000 good requests = hourly_usd × 1000 / (3600 × goodput_rps)
 这是单实例运行成本口径，未包含磁盘、下载、闲置 VM 等额外费用。报告需单独记录
 完整实验的计费时长。
 
-## 8. 命令与结果
+## 9. 命令与结果
 
 先在 Mac 检查 representation 计划：
 
@@ -169,7 +218,7 @@ make run-week06 WEEK06_PHASE=confirm
 PYTHON=.venv-vllm/bin/python bash scripts/start_vllm_variant.sh --variant awq --run
 ```
 
-## 9. 学完应当能解释什么
+## 10. 学完应当能解释什么
 
 为什么权重更小不一定让 TTFT 更低；为什么 `gpu-memory-utilization` 不等于实测
 GPU utilization；为什么不能同时扫描所有变量再挑最好结果；为什么没有量化收益时，

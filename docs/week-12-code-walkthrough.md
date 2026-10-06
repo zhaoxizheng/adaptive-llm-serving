@@ -90,7 +90,48 @@ duration 会得到 80ns，夸大实际占用。Reader 拒绝多 GPU 混算，避
 这里 busy 表示该设备有观测到的 CUDA activity，不等于 SM occupancy、算力利用率
 或内存带宽利用率。后者需要更多 counters，留给 Week 13。
 
-## 6. Gap 的分类为什么默认 unknown
+## 6. 核心代码精读
+
+### 合并区间怎样把“kernel 时间总和”变成“设备忙碌时间”
+
+GPU 不同 stream 的 activity 可以重叠。`summarize()` 裁剪到观察窗口后，调用共享的
+`union_intervals()`；这是 busy/idle 计算的核心算法。
+
+源码：[src/profile_tables.py](../src/profile_tables.py)，第 22–31 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+def union_intervals(intervals):
+    merged = []
+    for start, end in sorted(intervals):
+        if not math.isfinite(start) or not math.isfinite(end) or end < start:
+            raise ValueError("invalid timeline interval")
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(end, merged[-1][1])
+        else:
+            merged.append([start, end])
+    return merged
+```
+
+先按起点排序，保证只需与最后一个合并区间比较。当前起点不晚于已有终点，就用较大
+终点扩展；否则开始一个新区间。相接的区间也合并，因为中间没有正长度 idle。
+排序成本为 `O(n log n)`，扫描为 `O(n)`。
+
+手算 `[20,60]`、`[40,80]`、`[100,110]`：先合并成 `[20,80]` 与 `[100,110]`，busy=70。
+若观察窗口为 `[0,120]`，idle=50。嵌套的 `[30,40]` 不增加 busy，重复记录相同区间
+也不会增加 union 长度，但重复记录仍可能污染调用次数等其他统计。
+
+**设计取舍与边界。** 输入必须先限定同一 GPU、同一时钟和同一窗口。该函数只验证
+数值与区间方向，不知道 device/stream；若把两张 GPU 的 intervals 混入，它仍能算出
+一个数，却失去单设备 busy 的含义。窗口之外的 activity 必须先裁剪，避免 idle 为负。
+
+busy 也不等于 occupancy：一个很小的 kernel 可以让 GPU 时间线上非空，却只使用很少
+SM。下一步应从空隙两侧的 CUDA API correlation 和依赖检查原因，再决定是否需要
+Week 13 counters；不能把 union 的结果直接命名为算力利用率。
+
+**读后自检。** 加入一个覆盖 `[0,120]` 的低占用 kernel，busy 会变成多少？这能证明
+吞吐已经到 GPU 上限吗？
+
+## 7. Gap 的分类为什么默认 unknown
 
 `gaps.csv` 给出每段空闲区间，附重叠的 CUDA API/NVTX 名称。它默认写 `unknown`。
 重叠是定位线索，不能单独证明因果，例如 CPU 在 prepare 时 GPU 可能仍在等先前事件。
@@ -107,7 +148,7 @@ duration 会得到 80ns，夸大实际占用。Reader 拒绝多 GPU 混算，避
 脚本同时生成带类别、相对毫秒刻度和悬停事件名的 SVG。它帮助定位时间区域，不替代
 Nsight GUI 的完整线程、stream 和依赖分析；主要结论仍在报告中引用原 `.nsys-rep`。
 
-## 7. Eager/graph A/B 怎么检查
+## 8. Eager/graph A/B 怎么检查
 
 `eager_decode` 与 `graph_decode` 共用 128 input / 256 output，只改变 enforce-eager。
 均在 wait=2、warmup=2 后捕获 16 steps。采集后运行：
@@ -126,7 +167,7 @@ active steps 的逻辑 shape 分布一致，左侧实际 eager、右侧实际 re
 通过检查后仍要看 `pair.json` 的 capture overhead。只观察到允许 graph 的配置、没有
 真实 replay，或者混入不同 batch shape，都会拒绝形成有效比较。
 
-## 8. 命令与离线导出
+## 9. 命令与离线导出
 
 ```bash
 make plan-week12 PYTHON=python3.12
@@ -148,7 +189,7 @@ python3.12 -m src.summarize_nsys \
 Mac 的离线摘要不需要安装 Nsight 或 CUDA。若需重新从 `.nsys-rep` 导出 SQLite，则在
 有兼容版本 nsys 的机器使用保存的 `export-command.json`。
 
-## 9. 交给 Week 13 的内容
+## 10. 交给 Week 13 的内容
 
 先复核 Week 11 三个假设，记录支持、推翻或仍不确定。然后选择一个具体 kernel 或
 kernel family，附上所在 step、shape、调用次数、耗时范围与选择原因。提出待测 counter

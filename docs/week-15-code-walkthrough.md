@@ -44,7 +44,65 @@ sequence、Ready UID 集合、选中 Pod 和 request ID。`rr_verdict()` 先按 
 网关只运行一个 worker；增加 worker 时各有自己的 sequence，分析也必须按 worker
 分别验证。不要把普通 Kubernetes Service 的连接分发称为这段请求级 RR。
 
-## 3. EndpointSlice 与 readiness
+## 3. 核心代码精读
+
+### 一次 endpoint 选择究竟在哪个边界生效
+
+`proxy()` 在建立 upstream POST 前调用 `RoundRobin.select()`；先精读这个很短的临界区：
+
+源码：[src/rr_gateway.py](../src/rr_gateway.py)，第 38–46 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+def select(self):
+    if not self.endpoints:
+        raise web.HTTPServiceUnavailable(text="no Ready replica endpoints")
+    # No await between selection and increment: atomic in this one event loop.
+    endpoint = self.endpoints[self.index % len(self.endpoints)]
+    self.index = (self.index + 1) % len(self.endpoints)
+    self.sequence += 1
+    return endpoint, self.epoch, self.sequence
+```
+
+空候选立即 503；取模选择后推进 index，再递增全局 sequence，连同 endpoint 和 epoch
+返回。在一个 event loop 中，这段代码没有 `await`，别的 coroutine 不会在选择和递增
+之间切入。这个保证只适用于单 worker 进程，不等于跨进程原子操作。
+
+假设 endpoints 为 A/B，从 index=0 开始，两次请求依次选 A、B，即使 B 先完成，
+sequence 仍反映 admission 顺序。`update()` 把 endpoint 按 UID 排序，集合改变时重置
+index 并增加 epoch；Pod 被同名替换后 UID 改变，必须按新 epoch 验证轮转。
+
+### 背压来自 await write，取消来自连接生命周期
+
+源码：[src/rr_gateway.py](../src/rr_gateway.py)，第 151–163 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+            tail = combined[-32:]
+            # write() applies downstream backpressure, without aggregating SSE chunks.
+            await response.write(chunk)
+        if payload.get("stream") and upstream.status < 400 and not done:
+            raise ConnectionError("upstream stream ended without DONE")
+        await response.write_eof()
+        record["status"] = "completed" if upstream.status < 400 else "upstream_error"
+        return response
+except asyncio.CancelledError:
+    # AppRunner(handler_cancellation=True) delivers client disconnect here even while
+    # upstream has produced no new bytes. Exiting the context closes upstream.
+    record["status"] = "client_cancelled"
+    raise
+```
+
+每次 write 等待下游接受数据；客户端慢时，gateway 不会先把无限输出积在一个 Python
+列表里。循环结束后检查流式完成标记，再写 EOF。客户端取消会重新抛出
+`CancelledError`，而退出外层 upstream context 关闭上游连接，将断连传播给 vLLM。
+
+**设计取舍与边界。** 这里没有应用级 retry；headers 已发出后无法把状态改成 502，
+只能中断流并保存失败。搜索 `[DONE]` 是代理的轻量完成检查，严格 SSE/usage 验证仍在
+客户端。端点选择针对完整 `1 Pod / 1 node / G GPUs / TP=G` replica，无法选择内部 rank。
+
+**读后自检。** 把 `select()` 中间加入 `await` 会破坏哪条假设？让两个 worker 共享
+同一组 endpoints 但各自保留 index，为什么不能再要求汇总日志严格 A/B 交替？
+
+## 4. EndpointSlice 与 readiness
 
 `discovery()` 每秒从 Kubernetes API 读取实验 Service 的 EndpointSlice，只保留
 `ready=true`、非 terminating、具有 Pod UID 的 endpoint，然后检查 `/health`。
@@ -57,7 +115,7 @@ epoch 对齐后解释，不能要求 churn 期间仍遵守固定两端点的严�
 HTTP `/health` 仅表示当前可接入。正式测量前，runner 对每个新 Pod 直接做模型 warmup
 与 generation smoke；first token 的实际时间仍需从客户端与 timeline 对齐。
 
-## 4. SSE、backpressure 与取消
+## 5. SSE、backpressure 与取消
 
 `proxy()` 创建一个 upstream POST，关闭 redirect，也没有应用级 retry。读取到的 bytes
 通过 `StreamResponse.write()` 立即下发；下游慢时 await write 形成 backpressure，
@@ -71,7 +129,7 @@ HTTP `/health` 仅表示当前可接入。正式测量前，runner 对每个新 
 记为 `interrupted`；客户端因缺 `[DONE]`/usage 失败。请求不会切到另一个副本重试，避免
 把重复生成伪装成连续 stream。HTTP 和 SSE 失败语义分别保留在原始结果中。
 
-## 5. Deployment 为什么是这个形状
+## 6. Deployment 为什么是这个形状
 
 每个 Pod 包含 vLLM engine 和 identity proxy，共享同一个 Pod network namespace。
 vLLM 只监听 localhost:8000，Service 进入 sidecar:8081。GPU allocation 全部在 engine
@@ -85,7 +143,7 @@ container，一次申请 G 张 GPU；TP=G、PP=1，Pod 内所有 ranks 留在同
 模型 cache 默认 emptyDir，Pod 重建会丢失。这里的重启是 model-cache cold 的一类路径；
 若改为 PVC 复用 cache，必须另记录 cached/uncached，不能合并冷启动数据。
 
-## 6. 运行 RR 和 HPA
+## 7. 运行 RR 和 HPA
 
 ```bash
 make plan-week15 PYTHON=python3.12
@@ -110,7 +168,7 @@ HPA 使用 CPU utilization 与明确 CPU requests，min=1/max=2；它只控制 `
 的 replica count。比较固定 single、rr 和 hpa_burst 时同时报告实际 GPU allocation，
 不能把动态 HPA 和始终双副本称为同预算 A/B。CPU 不触发时记录当前 workload 的事实。
 
-## 7. Lifecycle 与失败
+## 8. Lifecycle 与失败
 
 先启动长流量，再在另一终端运行：
 
@@ -128,7 +186,7 @@ runner 核对资源标签后才操作，保存 action 时间和 before/after sna
 强制 Pod 删除是失败注入，会中断 stream；它需要用户在实验环境主动调用。
 生成本代码并没有执行任何集群变更、删除 Pod 或创建计费资源。
 
-## 8. 验证与交接
+## 9. 验证与交接
 
 本地测试已经覆盖真实 HTTP/SSE 的 RR、首段及时转发、取消和异常断流。
 这证明代理实现的这些行为，不证明 GPU 容量、实际 vLLM abort 或 Kubernetes drain。

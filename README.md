@@ -48,6 +48,13 @@ weekly execution plans and reading lists:
 - [Week 19 execution plan](docs/week-19-plan.md), [references](docs/week-19-references.md), and [Chinese code walkthrough](docs/week-19-code-walkthrough.md)
 - [Week 20 execution plan](docs/week-20-plan.md), [references](docs/week-20-references.md), and [Chinese code walkthrough](docs/week-20-code-walkthrough.md)
 
+Each weekly walkthrough includes a **核心代码精读** section with selected source
+excerpts, an explanation of the control/data flow, a worked example, design limits,
+and self-check questions. Read it alongside the linked implementation before running
+the experiment. Upstream excerpts use fixed commits; a source-reading sample is not
+a validated deployment version or runtime result. This reading fits within the
+existing weekly source-study time.
+
 ### Weeks 16–20 Overview
 
 Week numbers are prerequisite-based milestones, not calendar dates. The roadmap

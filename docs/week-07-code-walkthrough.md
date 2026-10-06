@@ -41,7 +41,71 @@ patch 内容和 import path 验证，并保存实际版本字符串。Week 5/6 �
 推荐先读 source map，再看 patch 的每个 hunk 对应哪个边界，最后读 runner 和 parser。
 不需要从 vLLM 仓库第一层目录依次往下读。
 
-## 3. Patch 怎样做到可重建
+## 3. 核心代码精读
+
+### 先登记输出接收者，再把请求交给 Engine Core
+
+以下摘录固定 vLLM `v0.10.2 / 01efc7ef781391e744ed08c3292817a773d654e6`。
+`AsyncLLM._add_request()` 是 API 侧进入 Engine Core 前的重要顺序约束：
+
+源码：[vllm/v1/engine/async_llm.py](https://github.com/vllm-project/vllm/blob/01efc7ef781391e744ed08c3292817a773d654e6/vllm/v1/engine/async_llm.py#L308-L318)，第 308–318 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+async def _add_request(self, request: EngineCoreRequest,
+                       prompt: Optional[str],
+                       parent_req: Optional[ParentRequest], index: int,
+                       queue: RequestOutputCollector):
+
+    # Add the request to OutputProcessor (this process).
+    self.output_processor.add_request(request, prompt, parent_req, index,
+                                      queue)
+
+    # Add the EngineCoreRequest to EngineCore (separate process).
+    await self.engine_core.add_request_async(request)
+```
+
+`OutputProcessor` 在当前进程建立 request 与 collector 的关联；之后才 await IPC
+提交。这样 Engine Core 返回结果时，本地已有对应的接收者。这里的 await 是异步提交
+边界，既不意味着模型已经执行，也不意味着正在 API 进程执行 GPU forward。
+
+沿 `generate()` 继续读：它从 `q.get_nowait() or await q.get()` 取结果，按
+`out.finished` 决定结束。已有结果优先直接取，空队列才让出 coroutine；stream 与
+nonstream 共用 engine 输出，但 serving 层消费和封装方式不同。取消分支捕获
+`CancelledError/GeneratorExit`，调用 `abort(request_id)` 后重新抛出。
+
+### Engine Core 的一次 step 不是处理完一个请求
+
+源码：[vllm/v1/engine/core.py](https://github.com/vllm-project/vllm/blob/01efc7ef781391e744ed08c3292817a773d654e6/vllm/v1/engine/core.py#L287-L299)，第 287–299 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+# Check for any requests remaining in the scheduler - unfinished,
+# or finished and not yet removed from the batch.
+if not self.scheduler.has_requests():
+    return {}, False
+scheduler_output = self.scheduler.schedule()
+model_output = self.execute_model_with_error_logging(
+    self.model_executor.execute_model,  # type: ignore
+    scheduler_output)
+engine_core_outputs = self.scheduler.update_from_output(
+    scheduler_output, model_output)  # type: ignore
+
+return (engine_core_outputs,
+        scheduler_output.total_num_scheduled_tokens > 0)
+```
+
+`schedule()` 产生本轮所有请求的工作量；executor 执行整个 `SchedulerOutput`；
+`update_from_output()` 再把 sampled tokens、停止状态和资源释放反馈给 scheduler。
+一个请求可能跨许多轮，一个 step 也可以包含多个请求。将这三个调用之间的对象画出来，
+就能把“HTTP 请求生命周期”与“GPU 迭代周期”分开。
+
+**设计取舍与边界。** 这是同步 step 主线，固定版本另有 batch queue/异步执行路径。
+request ID 负责输出关联，PID/IPC 负责定位进程；类名不等于独立进程。客户端连接关闭
+只能说明入口结束，还要继续核对 abort 到达 Engine Core、请求变为 terminal 和 KV free。
+
+**读后自检。** 输出接收者若在 IPC 提交后才注册，会出现什么时序风险？为什么一个
+stream 中已经返回首 token，仍不能删除 OutputProcessor 的 request state？
+
+## 4. Patch 怎样做到可重建
 
 `build()` 用 `git show <固定 commit>:<文件>` 读原始内容，不依赖工作目录是否已打 patch。
 每处变更通过明确的代码 anchor 定位；anchor 不唯一或不存在就报错。`patch_text()`
@@ -57,7 +121,7 @@ python3.12 -m scripts.build_trace_patches --source vendor/vllm
 源码入口和行号以未修改的固定 commit 为准；patch 本地新增行会改变 checkout 行号，
 阅读笔记仍应引用 commit permalink 中的原函数。
 
-## 4. Request ID 怎样对应
+## 5. Request ID 怎样对应
 
 本实验使用 `/v1/completions`，客户端给出 `request_id`，vLLM serving 层生成：
 
@@ -71,7 +135,7 @@ python3.12 -m scripts.build_trace_patches --source vendor/vllm
 批量 prompts、`n>1` 和多模型不属于这份最小实验，不能把这个 suffix 规则泛化到所有
 vLLM 使用方式。
 
-## 5. Trace event 对应什么真实行为
+## 6. Trace event 对应什么真实行为
 
 | Event | 位置与含义 |
 |---|---|
@@ -93,7 +157,7 @@ vLLM 使用方式。
 worker/model runner 的执行入口在 source map 中指出，但本周没有在 CUDA kernel 或 worker
 内部加采样。worker 是否独立进程取决于 executor，不能仅凭图中一个方框就说多一个 PID。
 
-## 6. Nonstream 和 stream 的共享与分叉
+## 7. Nonstream 和 stream 的共享与分叉
 
 两种请求共享 validation、preprocessing、AsyncLLM、Engine Core 和模型执行。serving
 层决定怎样消费 output：nonstream 汇总成最终 response；stream 按输出产生 SSE chunk。
@@ -106,7 +170,7 @@ finish reason 和 usage。解析器的 assertion 要求关键边界存在，但�
 有同机 monotonic clock，可以对照顺序；这个间隔包含多层处理和传输，不能直接称为
 某个 Python 函数耗时。
 
-## 7. Abort 路径为什么不能只看客户端关闭成功
+## 8. Abort 路径为什么不能只看客户端关闭成功
 
 `lifecycle_requests()` 的 abort 请求设置较大的 output 上限，在第一个非空 chunk 后
 立即 `close()` SSE iterator。已有 HTTP helper 会关闭底层 response/socket。
@@ -124,7 +188,7 @@ abort_sent → abort_received → request_freed(FINISHED_ABORTED)
 validation failure 使用不存在的模型名，客户端要求返回 400/404/422。该错误在有效内部
 request ID 创建前发生，因此单独记录 HTTP 错误证据，不凭空要求 Engine Core 事件。
 
-## 8. Trace 的开关、格式和体积
+## 9. Trace 的开关、格式和体积
 
 `VLLM_STUDY_TRACE_DIR` 未设置时 `emit()` 直接返回。每条 JSONL 有 monotonic `ts_ns`、
 UTC wall time、PID、thread、component、event、request ID，以及允许的计数/状态字段。
@@ -134,7 +198,7 @@ UTC wall time、PID、thread、component、event、request ID，以及允许的�
 event limit 时写 `trace_truncated`，parser 会拒绝把它当完整 trace。
 Week 5/6 的 server runner 会清除继承来的 trace 环境变量，避免调试开关污染性能实验。
 
-## 9. 在 VM 上准备并运行
+## 10. 在 VM 上准备并运行
 
 Mac 可直接预演，缺少 Week 6 结果时输出的是待替换的 baseline 命令：
 
@@ -164,7 +228,7 @@ make run-week07 VLLM_PYTHON=.venv-vllm/bin/python
 按 PID 分开的 JSONL，以及 `nonstream/`、`stream/`、`abort/` 下的 events 和 Mermaid 输入。
 源码检查或路径断言失败会保留已有 trace 和日志。完成后同步结果并停止 VM。
 
-## 10. 自测与下一周
+## 11. 自测与下一周
 
 [trace 测试](../tests/test_scheduler_study.py) 检查默认关闭、字段保护、截断拒绝、PID
 边界和真正的 aborted free。patch 的应用和语法检查验证源码改动形状；它们不能替代

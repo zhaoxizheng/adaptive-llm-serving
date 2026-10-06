@@ -232,7 +232,49 @@ output_tokens_per_second
 
 模型加载、warmup、CSV 写入和最终 detokenization 不在这些延迟指标内。
 
-## 8. Benchmark 如何组织 60 行结果
+## 8. 核心代码精读
+
+### Decode 闭包怎样把一次计算变成下一步状态
+
+前面的 prefill/cache 分支说明了计算内容；再看循环末尾，理解“模型返回 token”与
+“循环推进状态”分别发生在哪里。入口是 `run_greedy_generation()` 中的 `decode_step()`。
+下面前五行在闭包内，最后三行在外层循环，保留缩进差异以显示状态交接位置。
+
+源码：[src/inference.py](../src/inference.py)，第 177–185 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+    token = step_output.logits[:, -1, :].argmax(dim=-1, keepdim=True)
+    token_id = int(token.item())
+    if not use_cache:
+        full_sequence = torch.cat([full_sequence, token], dim=1)
+    return token, token_id
+
+(next_token, token_id), elapsed_ms = _measure_cuda(decode_step)
+generated.append(token_id)
+decode_step_ms.append(elapsed_ms)
+```
+
+逐段读：`argmax(..., keepdim=True)` 保持 `[1, 1]`，使返回值能直接成为下一步输入；
+`token.item()` 把单个 token ID 取到 CPU，便于保存结果，也会引入 host/device 同步。
+Cache off 分支将刚生成的 token 追加到 `full_sequence`，下一步才重新计算这条更长序列。
+闭包返回后，外层更新 `next_token`、追加 `generated`，并保存这一步的延迟。
+
+这里的 `nonlocal past_key_values/full_sequence` 很关键：它们跨 decode 调用保存状态；
+`next_token` 则由外层循环在每次调用返回后赋新值。若只更新 `generated` 而漏掉
+`next_token`，日志长度仍会增加，但模型会不断消费错误的输入。
+
+手算 `P=4, O=3`：prefill 消费 4 个 token，得到第 1 个输出；两次 decode 分别消费
+第 1、第 2 个输出，得到第 2、第 3 个输出。Cache on 的最终 KV 长度为 6，最后一个
+输出尚未进入模型。Cache off 的 forward 长度依次是 4、5、6。
+
+**设计取舍与边界。** 每步 `.item()` 让这个教学 loop 易于检查，但不能把其 TPOT 当作
+优化后 serving engine 的极限。Greedy `argmax` 也不是 temperature/top-p sampling；
+改采样策略需要同时修改一致性验证，不能继续要求与旧 greedy 路径逐 token 相同。
+
+**读后自检。** 如果把 cache-off 的 `torch.cat` 移到下一次 forward 之后，会漏掉哪个
+token？如果 `O=1`，为什么没有 decode 样本，却仍然有一次模型调用？
+
+## 9. Benchmark 如何组织 60 行结果
 
 [src/benchmark_kv_cache.py](../src/benchmark_kv_cache.py) 的正式循环是：
 
@@ -253,7 +295,7 @@ for prompt_tokens in prompt_lengths:
 当前配置总是先运行 Cache on，再运行 Cache off，而没有随机化顺序。相邻执行可以
 减少长时间漂移，但固定顺序本身也可能产生 order effect，报告中应把它列为限制。
 
-## 9. 如何证明两条路径算的是同一件事
+## 10. 如何证明两条路径算的是同一件事
 
 生成使用 greedy `argmax`。每次运行会把输出 token ID 列表计算成一个短 SHA-256
 hash。对于相同的：
@@ -270,7 +312,7 @@ Cache on/off 的 hash 必须一致，否则 benchmark 立即失败。
 
 该 hash 只是实验一致性检查，不是生成文本的安全或密码学证明。
 
-## 10. Spot 中断后为什么能续跑
+## 11. Spot 中断后为什么能续跑
 
 [src/result_store.py](../src/result_store.py) 不会直接在 CSV 尾部裸写。每完成一个
 case，它会：
@@ -288,7 +330,7 @@ read existing rows
 
 这里假设只有一个 benchmark writer；代码没有为多个并发进程写同一 CSV 提供锁。
 
-## 11. 为什么记录这么多 identity
+## 12. 为什么记录这么多 identity
 
 [src/common.py](../src/common.py) 和
 [src/week01_contract.py](../src/week01_contract.py) 将结果绑定到：
@@ -308,7 +350,7 @@ read existing rows
 会生成 `.experiment-source.json`。VM 会重新校验关键文件集合和 SHA-256，而不是
 相信一个裸 commit 字符串。
 
-## 12. Smoke、正式实验和分析各自负责什么
+## 13. Smoke、正式实验和分析各自负责什么
 
 ### Smoke generation
 
@@ -336,7 +378,7 @@ Smoke 成功不代表正式矩阵已经完成。
 
 图表是原始 CSV 的派生产物，不能替代 CSV。
 
-## 13. 最终 verifier 检查什么
+## 14. 最终 verifier 检查什么
 
 [scripts/verify_week01.py](../scripts/verify_week01.py) 要求以下证据全部存在且一致：
 
@@ -354,7 +396,7 @@ Smoke 成功不代表正式矩阵已经完成。
 `artifacts_ready` 更新为 `completed`。Receipt 不把会被随后修改的
 `run-status.json` 纳入自身 hash，避免循环依赖。
 
-## 14. 应怎样解释最终结果
+## 15. 应怎样解释最终结果
 
 合理预期是：
 
@@ -368,7 +410,7 @@ Smoke 成功不代表正式矩阵已经完成。
 不要预先写“快了多少”。倍率必须来自实际 CSV，并同时说明 GPU、模型、shape、
 重复数、失败数和测量边界。
 
-## 15. 推荐阅读顺序
+## 16. 推荐阅读顺序
 
 1. [configs/week01.yaml](../configs/week01.yaml)：先理解实验变量。
 2. [src/inference.py](../src/inference.py)：重点读 prefill 和两个 decode 分支。

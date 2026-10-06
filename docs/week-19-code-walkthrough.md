@@ -29,7 +29,57 @@ defaulted 对象；运行器不会把旧例子换个 apiVersion 就尝试部署�
 两个变体都做 dry-run，GPU generation 只执行一个最小主路径。CPU stub 可以检查控制面，
 但必须在报告标注它不代表 GPU generation 或性能。
 
-## 3. `snapshot()` 收集什么
+## 3. 核心代码精读
+
+### Reconcile 的实际行为是读取现状、比较并收敛
+
+源码阅读样本固定 KServe `v0.16.0 / 5b033a4024429302440b72180472ae2d26b44086`，定位其
+`v1alpha1/llmisvc` controller；它不替实验预选 installed CRD version 或 controller image。
+顶层 `LLMISVCReconciler.reconcile()` 加载/合并配置后依次协调 workload 和 router；
+资源级 helper 是：
+
+源码：[pkg/controller/v1alpha1/llmisvc/lifecycle_crud.go](https://github.com/kserve/kserve/blob/5b033a4024429302440b72180472ae2d26b44086/pkg/controller/v1alpha1/llmisvc/lifecycle_crud.go#L106-L118)，第 106–118 行；以下为原文摘录，仅移除公共缩进。
+
+```go
+typeLogLine := logLineForObject(expected)
+
+// Try to fetch the current state of the resource
+curr := empty.DeepCopyObject().(T)
+if err := c.Get(ctx, client.ObjectKeyFromObject(expected), curr); err != nil {
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to get %s %s/%s: %w", typeLogLine, expected.GetNamespace(), expected.GetName(), err)
+	}
+	// Resource doesn't exist, create it
+	return Create(ctx, c, owner, expected)
+}
+// Resource exists, update it if necessary
+return Update(ctx, c, owner, curr, expected, isEqual)
+```
+
+按 expected 的 namespace/name 读取真实对象。只有 NotFound 才创建；权限、网络等
+读取错误必须返回，不能误判为资源不存在。已存在则交给 `Update()`，由它验证 ownership、
+复制当前 `resourceVersion`、经过 dry-run/defaulting 后做语义比较，有变化才更新。
+
+这个函数会被重复调用，所以关键是收敛到 expected，而不是记住“第几步已经执行”。
+同一声明重复 reconcile 不应每次都造成 rollout。修改生成 child 后，下次 reconcile
+可能按父声明纠正它；具体是否纠正某字段要看 `isEqual` 和 Update 保留字段的范围。
+
+### Finalizer 与 ownerReferences 为什么要分开追踪
+
+顶层 `Reconcile()` 发现 deletion timestamp 后进入 finalize；清理失败返回错误并保留
+finalizer，成功才移除。`Delete()` helper 对受控的 namespaced child 先检查
+`IsControlledBy`；owner 已进入删除时可交给 Kubernetes GC 处理。
+因此“父 delete 请求成功”“finalizer 已移除”“owned descendants 已消失”是不同阶段。
+
+**设计取舍与边界。** `Create()` 的 owner 参数用于事件记录，不能仅因传入 owner 就
+推断它自动设置了 ownerReferences；要回到 expected 对象构造处与实际快照确认。
+Shared/referenced Gateway 不应被强行列为 owned child。名称重复不等于同一对象，
+资源图必须使用 UID；collection error 也不能被当作对象已消失。
+
+**读后自检。** API server 暂时不可访问时，为什么不能转进 Create 分支？如果父对象
+已删除、共享 Gateway 仍在，如何用 owner UID 图判断这是否符合预期？
+
+## 4. `snapshot()` 收集什么
 
 先调用 `api-resources`，只请求当前实际提供且列在 `audit_resources` 的 kinds。默认包括
 Pod、Deployment、ReplicaSet、Service、EndpointSlice、Gateway、HTTPRoute、InferencePool、
@@ -42,7 +92,7 @@ LLMInferenceService/Config、HPA、ScaledObject、ConfigMap 和 Events。
 `objects.jsonl` 是一行一个原始 Kubernetes 对象。Secret 不在采样范围；任何 model/request
 内容也不应放在需要导出的 ConfigMap 中。正式日志中的 prompt/body logging 需关闭。
 
-## 4. 资源图为何以 UID 为键
+## 5. 资源图为何以 UID 为键
 
 `resource_graph()` 先给每个对象建立 UID 节点，再把 ownerReferences 转成边。
 Kubernetes 名称可重用，但对象 UID 不会因名称相同而相同。一个典型的实际 owner 链可能是：
@@ -59,7 +109,7 @@ LLMInferenceService UID -> Deployment UID -> ReplicaSet UID -> Pod UID
 template；它本身不是 composition 合并顺序或持续写入行为的完整证明。还需要对照原始
 Config/baseRefs 顺序、dry-run 返回值、effective declaration 和 controller behavior。
 
-## 5. `kserve_action()` 只操作父声明
+## 6. `kserve_action()` 只操作父声明
 
 Mutate 输入 `kserve_mutation` 必须是一个相同名字的 LLMInferenceService，修改一个无害
 spec 字段，例如 release 确认支持的 template annotation。运行器 apply 后等待父 generation
@@ -74,7 +124,7 @@ shared config、Gateway、CRD、controller 都不删除。父消失不代表所�
 集合比较，分别输出仍存在的 owned、已消失的 owned、意外消失的 unowned。要求前后使用
 相同 inventory 范围；对象缺失只能证明观测差异，不能单凭它证明删除由 GC 导致。
 
-## 6. 执行顺序
+## 7. 执行顺序
 
 ```bash
 bash scripts/audit_week19_llmisvc.sh --preflight
@@ -103,7 +153,7 @@ invalid_dependency/not_ready 走 release-specific apply/restore artifacts；区�
 直接拒绝和 controller 接受后 Ready=False。前一种情况可能不会产生 runtime 请求阶段，
 但运行 session 仍以 failed 保存原因和 before/after 证据。
 
-## 7. 交给 Week 20 的内容
+## 8. 交给 Week 20 的内容
 
 填写 [week19 报告](../reports/week19.md)，整理 replicas 字段、metric 接口和 owner 的实测图。
 Week 20 默认回到 Week 18 的普通 `Deployment/vllm`，不把 KServe 生成 workload 与外部

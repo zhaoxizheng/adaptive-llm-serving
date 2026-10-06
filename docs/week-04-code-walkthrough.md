@@ -154,7 +154,73 @@ wrapper 保存精确 argv、已安装 CLI help、stdout、watchdog 和前后 met
 合法 JSON 不等于所有请求成功，也不等于统计口径正确。失败和中断保留未完成标记及日志，
 正式 verifier 会拒绝它们。completion marker 绑定 raw 和 sidecars 的 SHA-256。
 
-## 7. SSE 与精确 Trace Replay
+## 7. 核心代码精读
+
+### SSE 为什么必须分三层解析：bytes、line、event
+
+服务端的一次 write、TCP read 和 SSE event 没有一一对应关系。重点读
+`SSEParser.feed()`：
+
+源码：[src/openai_stream.py](../src/openai_stream.py)，第 137–150 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+def feed(self, chunk: bytes | bytearray | memoryview) -> list[SSEEvent]:
+    if self._closed:
+        raise ValueError("cannot feed a closed SSE parser")
+    if not isinstance(chunk, (bytes, bytearray, memoryview)):
+        raise TypeError("SSE chunks must be bytes-like")
+    events: list[SSEEvent] = []
+    view = memoryview(chunk).cast("B")
+    for offset in range(0, len(view), DEFAULT_READ_SIZE):
+        text = self._decoder.decode(
+            bytes(view[offset : offset + DEFAULT_READ_SIZE]),
+            final=False,
+        )
+        events.extend(self._consume_text(text))
+    return events
+```
+
+`memoryview` 避免先复制完整大输入；内部按 `DEFAULT_READ_SIZE` 分块，交给增量 UTF-8
+decoder。`final=False` 允许一个中文字符的多个 bytes 分别到达，未完成字符会留给下次
+`feed()`。`_consume_text()` 再处理跨 read 的行和 CR/LF，而不是对每个网络 chunk 直接
+`json.loads()`。
+
+最终在 `_dispatch_event()` 中组合多条 `data:`：
+
+源码：[src/openai_stream.py](../src/openai_stream.py)，第 229–241 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+def _dispatch_event(self) -> SSEEvent | None:
+    if not self._data_lines:
+        self._event_type = None
+        return None
+    event = SSEEvent(
+        data="\n".join(self._data_lines),
+        event=self._event_type,
+        id=self._last_event_id,
+        retry=self._retry,
+    )
+    self._data_lines.clear()
+    self._event_type = None
+    return event
+```
+
+`data` 行用换行符拼成一个 event；事件结束后清空 data 和 event type，last event ID
+保留为流状态。OpenAI JSON、`[DONE]`、usage 和 finish reason 是更上层的协议，不能
+仅凭收到了一个合法 SSE event 就把一次 completion 标成成功。
+
+手动追踪 bytes 分片 `b'data: {"x":'`、`b'1}\n'`、`b'\n'`：前两次尚未遇到空行，
+第三次才形成完整 event。再尝试把一个 UTF-8 字符从中间切开，说明 decoder 为什么
+必须跨调用保留状态。
+
+**设计取舍与边界。** 行和事件的大小上限分别防止无换行流与多行事件无限增长。
+SSE chunk 可包含多个 token，也可能只是 role/usage；first byte、first content 与
+engine first token 的边界不同，不能用网络 chunk 数替代输出 token 数。
+
+**读后自检。** 服务端返回 HTTP 200 后中途断流时，哪一层能判定 `[DONE]` 缺失？
+只把 `_dispatch_event()` 的返回值计数，会把吞吐量算成什么？
+
+## 8. SSE 与精确 Trace Replay
 
 `openai_stream.py` 不依赖 OpenAI SDK。`SSEParser` 使用增量 UTF-8 解码，处理跨网络分片的
 字符、CR/LF/CRLF、多行 data、注释和 `[DONE]`；网络读取块不等于一条完整 SSE event。
@@ -172,7 +238,7 @@ submitted requests，再按原始偏移发送。客户端满载会阻塞提交�
 `run_one()` 将首个非空内容 chunk 作为客户端首 token，检查 `[DONE]` 和 usage，核对实际
 prompt/output token 数。请求结果分 `completed`、`timeout`、`error`，warmup 请求单独计数。
 
-## 8. 指标解释及跨周可比性的边界
+## 9. 指标解释及跨周可比性的边界
 
 | 指标 | 当前计算边界 |
 |---|---|
@@ -196,7 +262,7 @@ tokenization 所在阶段和首 token 定义，不能将差值全部归因于 en
 replay 的恢复与最终 verifier 都从请求记录重算这些指标，见 [R2](week-02-04-code-review.md#r2)。
 现有跨周图画的是 TTFT，吞吐用于比较数据与报告。
 
-## 9. 归一化、图表与 SLO 选点
+## 10. 归一化、图表与 SLO 选点
 
 `vllm_result_adapter.py` 将 vLLM 0.10.2 输出转换为仓库 schema，并绑定 raw 文件 hash。
 它区分 requested token targets 与实际逐请求 token counts，校验请求状态总数、延迟、
@@ -218,7 +284,7 @@ replay 的恢复与最终 verifier 都从请求记录重算这些指标，见 [R
 用 TTFT 最差的 repeat 作为报告中的具体证据行，避免展示最好的一次，见
 [R4](week-02-04-code-review.md#r4)。这是当前三次重复下的选择规则，不代表长期生产容量。
 
-## 10. 离线验收与操作入口
+## 11. 离线验收与操作入口
 
 普通 Python 环境即可查看计划，无需启动 vLLM：
 

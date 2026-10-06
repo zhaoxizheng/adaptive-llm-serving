@@ -29,7 +29,78 @@ cache identity；模型内容和完整 cache key 不作为实验日志保存。
 `verify_live_case()` 在运行前把实际对象与所选 artifact 做字段子集比较，允许 API defaulting
 补充字段，但拒绝把 load-aware 实际配置标成 precise-prefix 的实验结果。
 
-## 3. `make_jobs()` 如何构造可比较流量
+## 3. 核心代码精读
+
+### Load 与 prefix 评分怎样进入同一个选择结果
+
+本节只固定**源码阅读样本**：llm-d-router `v0.11.0 / a5cbe600ebade00cf3e9885beaf2bfacddeabce1`。
+该版本依赖 GAIE `v1.5.0`，不表示它能直接部署到 Week 17 的 v1.0.0 环境；实验仍需
+独立完成兼容性和 artifacts 锁定。这里只借其完整实现解释 routing 机制。
+
+`SchedulerProfile.Run()` 顺序执行 filters → scorers → picker；加权核心在：
+
+源码：[pkg/epp/scheduling/scheduler_profile.go](https://github.com/llm-d/llm-d-router/blob/a5cbe600ebade00cf3e9885beaf2bfacddeabce1/pkg/epp/scheduling/scheduler_profile.go#L240-L256)，第 240–256 行；以下为原文摘录，仅移除公共缩进。
+
+```go
+// Iterate through each scorer in the chain and accumulate the weighted scores.
+for _, scorer := range p.scorers {
+	typedName := scorer.TypedName()
+	if verboseEnabled {
+		verbose.Info("Running scorer plugin", "plugin", typedName)
+	}
+	scores := runScorer(ctx, tracer, tracingActive, scorer, request, endpoints)
+	for endpoint, score := range scores { // weight is relative to the sum of weights
+		if debugEnabled {
+			debug.Info("Calculated score", "plugin", typedName, "endpoint", endpoint.GetMetadata().ID, "score", score)
+		}
+		weightedScorePerEndpoint[endpoint] += enforceScoreRange(score) * scorer.Weight()
+	}
+	if debugEnabled {
+		debug.Info("Completed running scorer plugin successfully", "plugin", typedName)
+	}
+}
+```
+
+每个 scorer 对相同的过滤后候选返回分数；框架约束评分范围，再乘该插件权重累加。
+最终按配置的 picker 决策，所以“prefix-aware”不等于永远选择命中最多的 endpoint。
+例如教学权重 load=2、prefix=1，A 的两分为0.2/1.0，总分1.4；B 为0.9/0.0，总分1.8。
+若 picker 取最高分，B 胜出。这里数字用于手算，不是推荐阈值或默认配置。
+
+### Precise prefix match 为什么不能累计离散命中 blocks
+
+阅读 `prefixAccumulator.endKey()` 中继续一条 prefix chain 的判断。下面只摘录循环
+前半；完整函数随后更新 confirmed/tier 状态，把仍有效的项加入 `keep`，再更新 active：
+
+源码：[pkg/kvcache/prefix_match.go](https://github.com/llm-d/llm-d-router/blob/a5cbe600ebade00cf3e9885beaf2bfacddeabce1/pkg/kvcache/prefix_match.go#L423-L430)，第 423–430 行；以下为原文摘录，仅移除公共缩进。
+
+```go
+keep := a.active[:0]
+for _, i := range a.active {
+	s := &a.slots[i]
+	if s.seen != a.keyStamp {
+		continue // the chain ends at the first key the pod does not hold
+	}
+	s.matched++
+	s.score += s.weight
+```
+
+输入按请求的 block keys 顺序遍历。`seen == keyStamp` 表示这个 Pod 在当前 key 上
+仍有记录；没看到就不加入后面的 `keep`，其 chain 终止。后续 key 再次出现这个 Pod，
+也不能填补已经断掉的前缀。`matched` 是连续长度；`score` 还可按存储 tier 的权重累计。
+
+手算 keys=`[h0,h1,h2]`：A 持有 h0/h2，B 持有 h0/h1。A 的连续命中只有1个 block，
+B 为2个；不能把 A 算成2。第一次 key 决定初始候选，后续只能延长尚未断开的 chain。
+同 Pod 同 key 的多个 rank/tier 记录会按实现折叠，不直接当成多个可复用 blocks。
+
+**设计取舍与边界。** Indexer 中的精确信息也有事件延迟和 eviction 竞态；该阅读版本
+还区分 speculative 与 confirmed chain。因此预测是路由决策输入，engine 实际 reuse
+仍要按 request ID、Pod UID、process generation 和模型/tokenizer identity 独立关联。
+负载过期、热点 prefix 集中和 Pod replacement 都可能让静态高分失去意义。
+
+**读后自检。** 为什么“路由到同一个 Pod”不足以证明复用了 KV？如果 index 命中512
+tokens、engine 实际0，应该保存怎样的两份证据，而不是直接改写成一次成功命中？
+
+## 4. `make_jobs()` 如何构造可比较流量
 
 arrival RNG 与 prefix-family RNG 分开，因此 locality 改变不会顺带改变请求到达轨迹。
 每个 repeat 改变 arrival/suffix seed，同一 repeat 的两个 pipeline 得到相同 trace。
@@ -49,7 +120,7 @@ arrival RNG 与 prefix-family RNG 分开，因此 locality 改变不会顺带改
 2 pipelines。repeat 0 先 load-aware，repeat 1 先 precise-prefix；下一次再轮转。
 故障 case 不在正式矩阵里。
 
-## 4. Cold / warm 的实际代码路径
+## 5. Cold / warm 的实际代码路径
 
 `warmup()` 显式 restart Deployment，等待当前 generation、Ready 和 GPU/TP/image/args
 匹配。随后对每个 replica 做 model warmup；这些请求使用独立 leading ID，不会预热正式
@@ -59,7 +130,7 @@ arrival RNG 与 prefix-family RNG 分开，因此 locality 改变不会顺带改
 从 EPP 的实际事件确认 cache index、process generation 与 residency，再解释 warm 结果。
 Cold cell 用于观察自然 locality 建立；不能把 warm cell 更低 TTFT 当成路由算法独有收益。
 
-## 5. `run_requests()` 为什么不用无限排队
+## 6. `run_requests()` 为什么不用无限排队
 
 它按预生成 offset 开环发请求，以 semaphore 限制正在执行的任务。达到 `max_inflight`
 时记 `client_overload`，不把请求偷偷排进无限 executor 队列。客户端到达延迟也记入 TTFT。
@@ -71,7 +142,7 @@ SSE 校验复用前序的 `experiment_client.request`：必须完成 stream、�
 用允许字段列表落盘，因此不会保存 output excerpt、prompt IDs 或 cache key。
 这证明流式协议/计数正确；语义输出一致性仍需额外的固定输入输出验证证据。
 
-## 6. Precise prediction 不等于实际 reuse
+## 7. Precise prediction 不等于实际 reuse
 
 `prefix_analysis()` 用 request ID 连接 decision 和 engine reuse，并要求双方完整 identity：
 
@@ -88,7 +159,7 @@ Pod replacement 后不能只按 Pod name 复用状态；同名/重建资源的 U
 缺失指标、过期 load、index residency 与 engine eviction 都要按所选实现记录，代码不会
 从 route affinity 推断它们。
 
-## 7. 命令与结果解读
+## 8. 命令与结果解读
 
 ```bash
 bash scripts/run_week18_llmd_routing.sh --plan
@@ -118,7 +189,7 @@ Stale/missing load、cache churn 和 EPP timeout 需提供各自 apply/restore a
 `--fault --case pod_replacement` 内建删除一个 lab Pod 的流程。故障后切回 load-aware，
 执行完整 smoke，并填写 [week18 报告](../reports/week18.md)。
 
-## 8. 测试怎样支撑代码说明
+## 9. 测试怎样支撑代码说明
 
 [workload 测试](../tests/test_platform_runner.py) 验证到达轨迹相同、共享前缀与唯一 suffix、
 热点分布、96-cell 交错矩阵和文本不落盘。[分析测试](../tests/test_platform_analysis.py)

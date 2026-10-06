@@ -70,7 +70,62 @@ query/target type/阈值和 scaleDown stabilization；poll/sync、缓存和 miss
 `threshold: 4` 只是待校准候选。正式运行必须填写 `metric.calibration_evidence`，先以
 独立 seed 做 low/steady/backlog 校准，再冻结 query、单位、阈值和 scrape label identity。
 
-## 5. Missing 不能变成 zero
+## 5. 核心代码精读
+
+### HPA 的 AverageValue 计算如何处理总量与副本数
+
+源码阅读样本为 Kubernetes `v1.34.1 / 93248f9ae092f571eb870b7664c534bfc7d00f03`；这不是实验集群版本声明。
+`GetObjectPerPodMetricReplicas()` 对应本周 Object metric + AverageValue 路径：
+
+源码：[pkg/controller/podautoscaler/replica_calculator.go](https://github.com/kubernetes/kubernetes/blob/93248f9ae092f571eb870b7664c534bfc7d00f03/pkg/controller/podautoscaler/replica_calculator.go#L304-L318)，第 304–318 行；以下为原文摘录，仅移除公共缩进。
+
+```go
+func (c *ReplicaCalculator) GetObjectPerPodMetricReplicas(statusReplicas int32, targetAverageUsage int64, metricName string, tolerances Tolerances, namespace string, objectRef *autoscaling.CrossVersionObjectReference, metricSelector labels.Selector) (replicaCount int32, usage int64, timestamp time.Time, err error) {
+	usage, timestamp, err = c.metricsClient.GetObjectMetric(metricName, namespace, objectRef, metricSelector)
+	if err != nil {
+		return 0, 0, time.Time{}, fmt.Errorf("unable to get metric %s: %v on %s %s/%s", metricName, objectRef.Kind, namespace, objectRef.Name, err)
+	}
+
+	replicaCount = statusReplicas
+	usageRatio := float64(usage) / (float64(targetAverageUsage) * float64(replicaCount))
+	if !tolerances.isWithin(usageRatio) {
+		// update number of replicas if change is large enough
+		replicaCount = int32(math.Ceil(float64(usage) / float64(targetAverageUsage)))
+	}
+	usage = int64(math.Ceil(float64(usage) / float64(statusReplicas)))
+	return replicaCount, usage, timestamp, nil
+}
+```
+
+先从 metric API 获取 workload 总量；读取失败返回 error。`replicaCount` 初始保留
+当前 status replicas，用总量除以“每副本 target × 当前副本数”判断偏离程度。
+超出 tolerance 后，原始建议值是 `ceil(total / target)`；最后把返回的 usage 换算为
+当前副本的平均值供状态使用。两次除法目的不同，不能再把总量乘一次 replicas。
+
+手算当前2副本、queue总量12、target=4：ratio=1.5，原始建议为3；但本周
+`maxReplicas=2`，最终不会扩成3，积压可能继续增长。总量从8变成8.2时，是否变化还
+受实际 tolerance 影响；不能每个采样点都机械地套 ceil 宣称 controller 失效。
+
+随后要沿 HPA controller 的 normalization 继续检查 min/max、扩缩速率和 stabilization。
+计算函数给出建议，不负责创建 Pod；Deployment、调度、GPU 资源、模型加载、Ready 和
+首 token 是后续不同阶段，必须由冷启动 timeline 分开。
+
+### KEDA 为什么也要检查生成的 HPA
+
+本仓库 `scaling_resources()` 将 Prometheus trigger 显式设置为 `AverageValue`，并把
+`horizontalPodAutoscalerConfig.behavior` 写进 ScaledObject。KEDA 提供 external metric，
+生成的 HPA 继续执行副本控制；应检查实际 HPA 的 owner UID 与目标 Deployment，不能
+把 KEDA 和它自己的 HPA 当成两个竞争 writer。
+
+**设计取舍与边界。** 本周 min=1，不用 KEDA cooldown 的 scale-to-zero 行为解释
+2→1；常规 scale-down 还要看生成 HPA 的 behavior。Metric 缺失是获取错误，不是
+测得0；不能靠 `or vector(0)` 把 outage 变成缩容信号。每增加一个副本增加 G 张 GPU，
+`replicas × G` 与单副本固定 TP 必须一起解释容量和成本。
+
+**读后自检。** HPA desired 已增加但 Pod 仍 Pending 时，哪个阶段尚未完成？如果
+新指标失效，怎样区分 controller 保留容量和业务真实无负载？
+
+## 6. Missing 不能变成 zero
 
 `metric_value()` 要求 Prometheus success、vector、恰好一条 series、有限非负值和新鲜
 timestamp。empty/multiple series、NaN/Inf、过期和未来时间都会报错。真实的 0 才是零负载。
@@ -84,7 +139,7 @@ Pod/model/workload 的 scrape relabeling 必须在固定 `metrics_scrape` artifa
 响应。采样失败记 `metric_error`；不会向 HPA 或 KEDA写一个人工零值。HPA currentMetrics、
 KEDA generated HPA、operator/events 则由原始对象快照检查。
 
-## 6. 负载、冷启动与 drain
+## 7. 负载、冷启动与 drain
 
 `burst` 的中间三分之一请求用 4 倍到达率；`ramp` 逐渐升到 4 倍再降载；`short_burst`
 只在很窄窗口加速。这里 burst 长短最终由保存的 trace 和真实冷启动相对判断，不从名字
@@ -98,7 +153,7 @@ termination timestamp 与 SSE `first_content_at/completed_at` 判断 overlap；�
 route_eligible → first_token。任一步缺失为 incomplete；顺序错误为 nonmonotonic。
 它不会把 Ready 直接补成首 token，也不会把 node Pending/model load 归因到 controller。
 
-## 7. GPU-hours 的积分
+## 8. GPU-hours 的积分
 
 `sample_loop()` 只计算 target Pods 中已 scheduled、尚未 Succeeded/Failed 的 GPU requests。
 terminating 但仍占用 GPU 的 Pod 仍计数；Pending 且没有 node 的 Pod 不计 allocated。
@@ -110,7 +165,7 @@ terminating 但仍占用 GPU 的 Pod 仍计数；Pending 且没有 node 的 Pod 
 lifecycle 证据时 billed 字段为 null；如果提供 billing JSON，其 start/end 必须与实验
 积分窗口一致，并带 source。
 
-## 8. 执行和分析
+## 9. 执行和分析
 
 ```bash
 bash scripts/run_week20_autoscaling.sh --preflight
@@ -144,7 +199,7 @@ Exporter 只监听 `127.0.0.1`，固定的 Prometheus 需通过已配置的本�
 尚无完成样本时不输出假零 TTFT/SLO。对历史 session 启动 exporter 只提供当前快照，
 不会自动把历史事件回填到 Prometheus 时间轴。
 
-## 9. 验证与最终结论
+## 10. 验证与最终结论
 
 [契约测试](../tests/test_platform_contract.py) 覆盖同一 target/denominator、1–2 上限与
 KEDA owner；[分析测试](../tests/test_platform_analysis.py) 覆盖非法 metric、真实 zero、

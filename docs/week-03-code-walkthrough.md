@@ -99,7 +99,54 @@ Trace request <request_id>. <base prompt>
 这个例子解释策略本身。真实模式下 worker 的忙闲、准入等待和线程调度会改变实际派发时间，
 不能拿理论 deadline 当作已经发生的 GPU 开始时间。
 
-## 4. HF 路径的线程、队列和背压
+## 4. 核心代码精读
+
+### Size-or-time 的关键不是 sleep，而是最老请求的 deadline
+
+`VirtualTimeScheduler._eligible_dispatch()` 只决定“何时允许发出一批”；
+`_pop_batch()` 才从 FIFO 队列移除请求。先读决策函数：
+
+源码：[src/dynamic_batcher.py](../src/dynamic_batcher.py)，第 162–177 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+def _eligible_dispatch(self, now_ns: int) -> tuple[int, str] | None:
+    if not self._queue:
+        return None
+    if self.config.policy is PolicyName.NO_BATCHING:
+        return now_ns, "immediate"
+    if self.config.policy is PolicyName.FIXED_WINDOW:
+        wakeup = self.next_wakeup_ns()
+        if wakeup is None or wakeup > now_ns:
+            return None
+        return wakeup, "window"
+    if len(self._queue) >= self.config.max_batch_size:
+        return now_ns, "size"
+    deadline = self._queue[0].admitted_ns + self.config.max_wait_ns
+    if deadline <= now_ns:
+        return deadline, "timeout"
+    return None
+```
+
+空队列没有可发出的 batch。`NO_BATCHING` 立即返回；`FIXED_WINDOW` 等待对齐的窗口。
+最后三个分支属于 size-or-time：先检查人数是否已满，再计算最老请求的绝对 deadline，
+未满且未到期就返回 `None`。后续新请求不会重置老请求的 deadline。
+
+例：`max_batch_size=4, max_wait=10ms`，请求分别在 0、3、7ms 入队；若没有第 4 个请求，
+10ms 发出三请求 batch。若第 4 个在 8ms 到达，则 8ms 由 size 触发；不是再等 10ms。
+这说明等待上限约束的是组批等待，无法保证包含 GPU 排队在内的端到端延迟。
+
+还要跟到 `advance_to(..., dispatch_slots=0)`：worker 忙时只推进时钟，不出队；
+fixed-window 会跳过已错过的窗口。`_pop_batch()` 中 `min(max_batch_size, len(queue))`
+允许 timeout 触发不足一批的请求，使用 `popleft()` 保持 FIFO。
+
+**设计取舍与边界。** 虚拟时钟让策略可以用同一 trace 复现，GPU worker 是否可接收
+仍由真实 adapter 决定。这里一批请求从 prefill 到 decode 结束成员固定；请求结束后
+不能在剩余成员的 decode 中插入新请求，因此尚未实现 vLLM 的 iteration-level batching。
+
+**读后自检。** GPU 在 5–20ms 忙时，上例能否真的在 10ms 开始计算？请分别写出 policy
+deadline、实际 dispatch 和 GPU start，避免把三者混成一个时间点。
+
+## 5. HF 路径的线程、队列和背压
 
 `run_online_case()` 有三个执行角色：
 
@@ -122,7 +169,7 @@ HF 路径用实际 handoff 时间覆盖调度器可能返回的历史派发时�
 伪装成按时发生。`worker_became_available_timeout` 等 trigger 用来解释 worker 忙导致
 deadline 延后。`queue_depth_at_dispatch` 是取走当前 batch 后剩余的队列深度。
 
-## 5. 一个请求的时间线与指标
+## 6. 一个请求的时间线与指标
 
 ```text
 scheduled_arrival
@@ -155,7 +202,7 @@ HF 没有真正向客户端流式发送首 token。`first_token_ns` 是以 worke
 另外，本周 TTFT/E2E 从 **admitted** 起算，不包含 arrival lag 和 admission wait。
 分析过载时需要同时看拒绝率、准入等待和原始时间戳，不能只看已完成请求的 P99。
 
-## 6. Fake 与 HF 的用途
+## 7. Fake 与 HF 的用途
 
 `FakeBatchBackend` 按 batch size 查配置中的教学服务时间，并用固定比例计算首 token
 偏移。`simulate_case()` 直接跳到下一次到达、deadline 或完成事件，不 sleep，也不导入
@@ -165,7 +212,7 @@ HF 则按真实时钟工作，调用与 Week 2 相同的定长、cache-on GPU lo
 `simulate_case()` 与 `run_online_case()` 驱动；fake 的数值和真实线程时序都不能代替 GPU
 测量。HF backend 当前只接受同一批内相同 prompt/output shape。
 
-## 7. 实验规模、统计分母与读图限制
+## 8. 实验规模、统计分母与读图限制
 
 | Profile | Case 数 | 用途 |
 |---|---:|---|
@@ -201,7 +248,7 @@ Week 4 replay 使用相同窗口定义，并在对比时核对分母和完成数
 固定参数曲线。Week 4 loader 复用相同筛选函数，并保留 case/batch/delay 身份，见
 [R3 修复记录](week-02-04-code-review.md#r3)。
 
-## 8. 结果提交、恢复和验收
+## 9. 结果提交、恢复和验收
 
 每个 case 独立写入 `raw/cases/<case-id>/`：
 
@@ -226,7 +273,7 @@ shell 先调用 `prepare_week03_run.py` 生成完整的 effective config，再�
 直接调用 shell 且未设置 `CALIBRATE=1` 时，已有 calibration 作为只读输入使用。
 详细见 [R5](week-02-04-code-review.md#r5)。
 
-## 9. 执行入口与调试顺序
+## 10. 执行入口与调试顺序
 
 已有普通 Python 环境时，可以先运行纯 CPU 模拟：
 

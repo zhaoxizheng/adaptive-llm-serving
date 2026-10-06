@@ -51,7 +51,44 @@ flowchart TD
 建议按 `配置 → benchmark main → 输入构造 → GPU loop → contract → analysis/verifier`
 阅读。这样可以先理解推理主线，再理解围绕主线的证据管理。
 
-## 3. 一个 Batch 怎样进入模型
+## 3. 核心代码精读
+
+### 从 mask 找到每个请求自己的最后一个有效位置
+
+重点读 `run_batched_greedy_generation()` 调用的 `_select_prompt_tokens()`。
+它把 `[B, P, V]` 的 logits 变成 `[B, 1]` 的下一 token，`V` 是词表大小。
+
+源码：[src/hf_batch_backend.py](../src/hf_batch_backend.py)，第 270–278 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+def _select_prompt_tokens(logits: Any, attention_mask: Any):
+    """Select one next token per row at that row's last non-padding position."""
+
+    torch = _torch()
+    positions = torch.arange(attention_mask.shape[1], device=attention_mask.device)
+    last_positions = (attention_mask.to(dtype=torch.long) * positions).max(dim=1).values
+    row_positions = torch.arange(logits.shape[0], device=logits.device)
+    last_logits = logits[row_positions, last_positions, :]
+    return last_logits.argmax(dim=-1, keepdim=True)
+```
+
+`positions` 是 `[0, 1, ..., P-1]`；mask 转整数后相乘，把 padding 位置归零。
+沿序列维取最大值得到每行最后一个有效 token 的下标。`row_positions` 与
+`last_positions` 配对索引，选出 `[B, V]`，最后只沿词表维做 argmax。
+
+用两行手算：mask 为 `[1, 1, 0, 0]` 和 `[0, 0, 1, 1]`，有效末位分别是 1 和 3。
+统一使用 `logits[:, -1, :]` 会让第一行读到 padding；使用 `mask.sum()-1` 又会让
+第二行错误地读到位置 1。这里寻找的是最后一个有效**位置**，不是有效 token 数量。
+
+**设计取舍与边界。** 这只解决输出 logits 的选择，不会自动修复模型内部的
+`position_ids` 或 cache position。全零 mask 会得到位置 0，因此非空输入是调用方
+必须保证的前提，不能把该函数当作空请求验证器。本周正式矩阵为等长输入；变长 batch
+要另验 padding、position 和 cache 的完整推理语义。
+
+**读后自检。** 写出 `[B, P, V] → [B, V] → [B, 1]` 每一步的索引；说明为什么这里
+的 advanced indexing 不是取出 B 行与 B 个位置的笛卡尔积。
+
+## 4. 一个 Batch 怎样进入模型
 
 `build_exact_length_batch()` 把 prompt 编码后重复、截断到指定 token 数，得到
 `[batch_size, prompt_tokens]`。这是用于控制计算量的合成输入，不代表自然语言内容质量。
@@ -65,7 +102,7 @@ flowchart TD
 left/right padding，并不等于已经验证任意变长、左右 padding 的 GPU 推理语义；未来扩展
 变长 batch 时，还要检查模型的 `position_ids`、cache 位置和逐请求输出一致性。
 
-## 4. Prefill 与 Decode 的关键实现
+## 5. Prefill 与 Decode 的关键实现
 
 `load_hf_batch_model()` 在调用时才导入 Torch 和 Transformers，加载固定 revision，
 使用 `cuda:0`，并执行 `model.eval()`。实际生成在 `torch.inference_mode()` 内完成。
@@ -89,7 +126,7 @@ CPU 输入 [B, P]
 退出的分支，因此成功结果的总输出 token 数是 `B × O`。这有利于控制计算量，但与真实
 聊天服务按 EOS 结束的行为不同。
 
-## 5. 计时边界：字段名必须配合公式理解
+## 6. 计时边界：字段名必须配合公式理解
 
 `_measure_cuda()` 用 `perf_counter()` 计时，并在被测调用前后执行 CUDA synchronize。
 它测到的是包含 CPU 调用开销的同步区间，不是 CUDA event 意义上的纯 kernel 时间。
@@ -115,7 +152,7 @@ hash 和部分 Python bookkeeping 不在上述分段加总内。因此 `e2e_late
 `mean_tpot_ms` 和 `p95_itl_ms` 都描述整批同步 decode 的间隔，不是跨在线请求的尾延迟。
 若只生成 1 个 token，没有 decode 区间，相关字段应为空。
 
-## 6. 理论 KV Cache 与实际显存为何不同
+## 7. 理论 KV Cache 与实际显存为何不同
 
 模型加载后，`capture_model_memory_baseline()` 同步 GPU、清理 allocator cache，再记录
 allocated/reserved baseline。每次生成前清理缓存、重置 peak stats，结束时读取峰值。
@@ -135,7 +172,7 @@ KV bytes = 2 × layers × kv_heads × head_dim × (P + O - 1) × B × dtype_byte
 当作 KV 大小。当前 loop 在 decode 期间还保留 `prefill_output`，其中的 prompt logits
 也是阅读显存结果时要注意的实现开销。字段后缀虽为 `_mb`，换算实际使用 `1024²`，即 MiB。
 
-## 7. Smoke、失败与恢复
+## 8. Smoke、失败与恢复
 
 正式 CSV 写入前，`run_preformal_smoke()` 检查 batch 1、2、4 的 input/mask/output shape，
 保存完整生成 token ID、逐请求及整体 SHA-256，并要求 batch=1 与
@@ -158,7 +195,7 @@ success/OOM 混合不能取成功子集当作有效聚合。warmup 普通异常�
 不能当作支持并发写入的大规模日志系统。进程中断后从缺失 case 恢复；已经记录的 `error`
 也是 terminal row，重启不会自动重测它。若要修正代码后重测，应保留旧证据并创建新运行。
 
-## 8. 从 Raw 数据到最终验收
+## 9. 从 Raw 数据到最终验收
 
 默认结果根为 `results/week02/`：
 
@@ -189,7 +226,7 @@ model/dtype/GPU 上下文得到的绘图输入 hash。verifier 重算 summary、
 报告中的 `WEEK02-EVIDENCE` block 与未填写 marker。文件完整和报告完成都满足后，才写入
 验收 receipt 并把状态置为 `completed`。
 
-## 9. 运行与阅读测试
+## 10. 运行与阅读测试
 
 在已经准备好 `.venv` 和 CUDA 的 GPU VM 上运行：
 

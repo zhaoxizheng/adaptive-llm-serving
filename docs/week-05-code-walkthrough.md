@@ -120,7 +120,45 @@ P50/P95/P99 从成功请求的完整 cohort 计算，同时单独报告错误、
 错误不会被填成 0ms，失败率也不会从容量判定中消失。少量请求的 P99 接近最大值，报告
 必须同时写样本数，不能仅凭这个百分位宣称有很精确的尾延迟估计。
 
-## 7. Prometheus 怎样绑定到 run
+## 7. 核心代码精读
+
+### SLO 判定是请求级交集，goodput 才能代表有效容量
+
+`analyze_run()` 先用原始时间戳重建延迟，再调用 `slo_attained()`：
+
+源码：[src/analyze_week05.py](../src/analyze_week05.py)，第 16–22 行；以下为原文摘录，仅移除公共缩进。
+
+```python
+def slo_attained(record, slo):
+    return record.get("status") == "success" and all(
+        isinstance(record.get(key), (int, float))
+        and math.isfinite(record[key])
+        and 0 <= record[key] <= threshold
+        for key, threshold in slo.items()
+    )
+```
+
+第一道门是 `status == success`，HTTP 错误或未完成 stream 不会因耗时很短而通过。
+随后对该 workload 的每项阈值取 `all`：TTFT、TPOT、端到端延迟必须在**同一请求**
+上同时满足。类型、finite 和非负检查让缺失值、NaN 与错误时间戳无法被误当作好请求。
+
+例如 100 个请求里 90 个完成，80 个满足 TTFT，75 个满足 TPOT，而两者及其他约束的
+交集只有 70 个。若固定统计窗口为 10s，goodput 是 7 requests/s；不是 9，也不是
+`min(80, 75)/10`。SLO attainment 的分母仍是全部到达请求，不是成功子集。
+
+`rebuild_latencies()` 以 `scheduled_at` 为起点，first/last content 为流式边界。
+这保留了客户端发出延迟；若只从实际发送时刻计时，负载生成器饱和会被隐藏。
+接着在 `analyze_run()` 中查看 `seconds`、`attained` 与 `good_in_window`，区分按到达
+cohort 计数和必须在窗口内完成的口径；跨窗口的长请求不能悄悄更换分母。
+
+**设计取舍与边界。** 这段函数只能判断单请求达标；容量选点还要求重复完整、队列不
+持续增长、客户端未先饱和。低负载下两种配置都能完成全部请求，goodput 相等并不说明
+最大容量相等。均值/P95 分别达标也无法证明每个请求都满足联合 SLO。
+
+**读后自检。** 两组请求的 TTFT P95 与 TPOT P95 相同，联合达标数能否不同？构造
+“不同请求分别违反两个阈值”的例子，再检查报告是否保留全部失败的分母。
+
+## 8. Prometheus 怎样绑定到 run
 
 `inventory()` 从本次 `/metrics` 读取实际名字和 labels。查询文件只是固定版本的候选
 映射；必需 metric 缺失就使 capture 无效，不能从类似名称猜出一个替代指标。
@@ -134,7 +172,7 @@ window 内。counter 保留原始累计值，在离线分析中计算窗口内�
 客户端 token throughput 是“窗口内完成请求”的 token 总量；server counter 是“窗口内
 发生的 token 工作”，有未完成请求时两者并不完全相等，需要结合 queue 和 drain 解释。
 
-## 8. 怎样判定容量，而不是挑一个最大吞吐数字
+## 9. 怎样判定容量，而不是挑一个最大吞吐数字
 
 一个 run 需同时通过客户端有效性、GPU/Prometheus 证据完整性，以及以下稳定性检查：
 
@@ -151,7 +189,7 @@ window 内。counter 保留原始累计值，在离线分析中计算窗口内�
 才标 `ready=true`。它同时携带冻结的 Week 5 配置和 baseline server 身份，Week 6 读取后
 不能为了量化方案重新放宽 SLO。
 
-## 9. 运行和产物位置
+## 10. 运行和产物位置
 
 Mac 预演无需 CUDA、vLLM、Transformers，只需已有的 Python 3.12 与 PyYAML：
 
@@ -180,7 +218,7 @@ make analyze-week05 PYTHON=python3.12
 `managed_server` 停止的是它拥有的 vLLM 进程组；停止 GCP VM 仍使用已有的
 `scripts/gcp_vm.sh stop`，并核对磁盘等计费资源。
 
-## 10. 自测与边界
+## 11. 自测与边界
 
 [观测测试](../tests/test_study_observability.py) 覆盖混合 SLO、队列增长、三次重复、
 counter reset、stale scrape、seed 重放和 TPOT 截止位置。
