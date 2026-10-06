@@ -48,7 +48,9 @@ def deployment(name, replicas, base, lock):
     gpus = base["gpus_per_replica"]
     shape = dict(model=base["model"], engine=base["engine"])
     argv = engine_command(shape, host="127.0.0.1")
-    field = lambda key: dict(valueFrom=dict(fieldRef=dict(fieldPath=key)))
+    def field(key):
+        return dict(valueFrom=dict(fieldRef=dict(fieldPath=key)))
+
     identity = dict(name="identity", image=lock["gateway_image"],
         ports=[dict(name="http", containerPort=8081)],
         env=[dict(name="LOCAL_ENGINE", value="1"), dict(name="LISTEN_HOST", value="0.0.0.0"),

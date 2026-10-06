@@ -7,7 +7,7 @@ import sys
 import time
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Mapping
 
 from src.common import load_yaml, utc_now, write_json
 from src.vllm_contract import PINNED_VLLM_VERSION, config_fingerprint, validate_config

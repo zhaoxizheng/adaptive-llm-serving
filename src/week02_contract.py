@@ -12,10 +12,10 @@ from src.common import stable_fingerprint, utc_now
 from src.result_store import parse_bool
 from src.week02_smoke import smoke_workload
 from src.week01_contract import (
-    collect_runtime_identity,
+    collect_runtime_identity as collect_runtime_identity,
     runtime_fingerprint,
     source_contract,
-    validate_model_snapshot,
+    validate_model_snapshot as validate_model_snapshot,
 )
 
 SCHEMA_VERSION = 3

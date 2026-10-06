@@ -26,14 +26,14 @@ PROJECT_DIR = Path(__file__).resolve().parents[1]
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from src.vllm_contract import (
+from src.vllm_contract import (  # noqa: E402
     PINNED_VLLM_VERSION,
     is_loopback_host,
     server_argv,
     validate_config,
     validate_help_support,
 )
-from src.week04_contract import (
+from src.week04_contract import (  # noqa: E402
     artifact_identity,
     load_run_metadata,
     validate_artifact_identity,
