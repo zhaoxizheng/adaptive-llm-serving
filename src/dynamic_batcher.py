@@ -9,6 +9,7 @@ from src.workload import TraceRequest, validate_trace
 
 
 class PolicyName(StrEnum):
+    # 不组批立即派发；固定窗口到边界派发；size_or_time 达到批量或最老请求期限即派发。
     NO_BATCHING = "no_batching"
     FIXED_WINDOW = "fixed_window"
     SIZE_OR_TIME = "size_or_time"
@@ -69,12 +70,10 @@ class Batch:
 
 
 class VirtualTimeScheduler:
-    """Pure request-level batch formation driven by explicit virtual time.
+    """由调用方显式推进时间的纯请求级组批状态机，不拥有线程、时钟或模型。
 
-    The class deliberately owns no event loop, clock, worker, or model. Callers
-    submit every arrival at timestamp ``t`` before calling ``advance_to(t)``.
-    Therefore an arrival exactly on a fixed boundary or oldest-request deadline
-    joins the batch flushed at that timestamp.
+    调用方应先提交时间 t 的所有到达，再调用 advance_to(t)。因此恰好在窗口边界
+    或最老请求期限到达的请求，也能加入该时刻派发的批次。时间单位为纳秒。
     """
 
     def __init__(self, config: SchedulerConfig):
@@ -120,6 +119,7 @@ class VirtualTimeScheduler:
             raise ValueError(
                 "observed_arrival_ns must be between scheduled arrival and admission attempt"
             )
+        # 容量只针对待组批队列；满时返回拒绝及终态时间，不在此睡眠或阻塞等待。
         if len(self._queue) >= self.config.queue_capacity:
             terminal = timestamp + self.config.admission_timeout_ns
             return AdmissionDecision(
@@ -144,6 +144,7 @@ class VirtualTimeScheduler:
         )
 
     def next_wakeup_ns(self) -> int | None:
+        """返回策略下次应检查派发的时间；由外层事件循环负责唤醒。"""
         if not self._queue or self._closed:
             return None
         if self.config.policy is PolicyName.NO_BATCHING:
@@ -171,12 +172,14 @@ class VirtualTimeScheduler:
             return wakeup, "window"
         if len(self._queue) >= self.config.max_batch_size:
             return now_ns, "size"
+        # size_or_time 未凑满时按队首的准入时间计算期限，新请求不会重置最老请求的等待。
         deadline = self._queue[0].admitted_ns + self.config.max_wait_ns
         if deadline <= now_ns:
             return deadline, "timeout"
         return None
 
     def _pop_batch(self, dispatch_ns: int, trigger: str) -> Batch:
+        # 按 FIFO 取不超过 max_batch_size 个请求，仅形成批次，不执行模型。
         count = min(self.config.max_batch_size, len(self._queue))
         items = tuple(self._queue.popleft() for _ in range(count))
         batch = Batch(
@@ -193,10 +196,9 @@ class VirtualTimeScheduler:
     def advance_to(
         self, now_ns: int, *, dispatch_slots: int | None = None
     ) -> tuple[Batch, ...]:
-        """Advance virtual time and return eligible batches.
+        """推进虚拟时间并返回可派发批次，以 dispatch_slots 表达 worker 背压。
 
-        ``dispatch_slots`` lets a serving adapter expose worker back-pressure.
-        ``None`` drains all policy-eligible batches; zero only advances time.
+        None 表示派发所有满足策略的批次；0 只推进时间，不形成待执行批次。
         """
 
         self._move_time(now_ns)
@@ -205,9 +207,7 @@ class VirtualTimeScheduler:
         if self._closed:
             return ()
         if dispatch_slots == 0:
-            # A real adapter uses zero slots while its sole worker is busy. Fixed
-            # windows reached in that interval are skipped, not retained as a
-            # latent formed batch with a historical dispatch timestamp.
+            # 单 worker 忙时没有派发槽位；跨过的固定窗口跳过，不能事后伪造历史派发。
             if (
                 self.config.policy is PolicyName.FIXED_WINDOW
                 and self._next_window_ns is not None
@@ -235,7 +235,7 @@ class VirtualTimeScheduler:
     def close(
         self, now_ns: int, *, dispatch_slots: int | None = None
     ) -> tuple[Batch, ...]:
-        """Flush admitted requests in FIFO chunks, optionally one worker slot at a time."""
+        """关闭时按 FIFO 清空已准入请求，可受 worker 槽位限制分次派发。"""
 
         self._move_time(now_ns)
         if self._closed:
@@ -258,10 +258,9 @@ def build_scheduler(config: SchedulerConfig) -> VirtualTimeScheduler:
 def schedule_trace(
     trace: Sequence[TraceRequest], config: SchedulerConfig
 ) -> tuple[Batch, ...]:
-    """Form deterministic batches without simulating a worker.
+    """生成确定性组批示例，不模拟 worker 服务耗时或背压。
 
-    This helper is useful for golden examples. It assumes immediate queue
-    admission and an unconstrained handoff after each policy flush.
+    假设请求立即准入且派发不受限；不能用它代替真实服务性能测试。
     """
 
     validate_trace(trace)

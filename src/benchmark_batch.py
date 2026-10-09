@@ -153,8 +153,10 @@ def _workload_key(case: CaseSpec) -> tuple[str, int, int, int]:
 
 
 def main() -> None:
+    """执行静态 batch 测试矩阵，逐条保存成功或失败记录，并支持断点续跑。"""
     args = parse_args()
     config = load_yaml(args.config)
+    # 固定正式测试矩阵并绑定已提交的源码，避免不同配置或代码的结果混用。
     validate_canonical_matrix(config)
     source = source_identity()
     require_clean_source(source)
@@ -174,6 +176,7 @@ def main() -> None:
     metadata = load_or_create_metadata(
         metadata_path, output_path, config, source, runtime
     )
+    # 校验已有记录后恢复终态用例；终态也包含已实际测量的 OOM/error，不只是成功。
     existing_rows = read_rows(output_path, expected_fields=RESULT_FIELDS)
     completed = validate_result_rows(
         existing_rows, metadata, config, require_complete=False
@@ -216,11 +219,13 @@ def main() -> None:
         raise RuntimeError(
             f"Loaded dtype {resolved_dtype} differs from runtime {runtime['dtype']}"
         )
+    # 模型加载后记录 allocated/reserved 显存基线，后续报告峰值及相对基线增量。
     baseline = capture_model_memory_baseline()
     warmup_runs = int(benchmark["warmup_runs"])
     padding_side = str(generation.get("padding_side", "left"))
     prompt = str(generation["prompt"])
 
+    # 正式测试前验证真实 batch 形状及输出一致性；已有 smoke 也必须重新校验。
     if smoke_path.is_file():
         smoke = read_json(smoke_path)
         validate_smoke_artifact(smoke, config, metadata)
@@ -247,6 +252,7 @@ def main() -> None:
         write_json(smoke_path, smoke)
         print(f"Pre-formal smoke/parity passed for {smoke['smoke_batch_sizes']}.")
 
+    # 按工作负载分组未完成的重复测试，同一组只执行一轮配置规定的预热。
     workloads: dict[tuple[str, int, int, int], list[CaseSpec]] = {}
     for case in cases:
         if case.key not in completed:
@@ -255,6 +261,7 @@ def main() -> None:
     written = 0
     for pending in workloads.values():
         first = pending[0]
+        # 理论 KV 大小是估算值，不等同于实测显存增量；预热结果不写入正式记录。
         theoretical = _theoretical_bytes(model.config, first, resolved_dtype)
         warmup_error: BaseException | None = None
         try:
@@ -279,6 +286,8 @@ def main() -> None:
         except Exception as error:
             warmup_error = error
 
+        # 预热 OOM 不能代替正式测量：仍逐个尝试重复用例，建立真实容量边界。
+        # 非 OOM 的预热异常直接中止，不凭空生成失败行。
         if warmup_error is not None:
             cleanup_cuda_after_failure()
             gc.collect()
@@ -331,6 +340,7 @@ def main() -> None:
                 )
                 cleanup_cuda_after_failure()
                 gc.collect()
+            # 正式测量异常记录为 OOM/error，并清理 CUDA；每个实际尝试逐条持久化。
             append_row(output_path, row, RESULT_FIELDS)
             completed.add(case.key)
             written += 1
@@ -342,6 +352,7 @@ def main() -> None:
             else:
                 print(f"{case.name}: {row['status']} during measurement")
 
+    # 完整矩阵不代表全部成功：还需验证 smoke 对比和正式完成条件。
     rows = read_rows(output_path, expected_fields=RESULT_FIELDS)
     validate_result_rows(rows, metadata, config, require_complete=True)
     validate_smoke_formal_hashes(smoke, rows)

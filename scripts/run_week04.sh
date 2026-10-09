@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CONFIG="${CONFIG:-configs/week04.yaml}"
+# 默认采集 GPU 证据；计划、离线分析、审计模板和最终验收使用独立模式。
 MODE="gpu"
 
 usage() {
@@ -36,10 +37,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd "${PROJECT_DIR}"
+# vLLM 使用独立环境，避免其依赖与 HF/离线分析环境相互覆盖。
 CONTRACT_PYTHON="${CONTRACT_PYTHON:-python}"
 GPU_PYTHON="${VLLM_PYTHON:-${PYTHON:-.venv-vllm/bin/python}}"
 ANALYSIS_PYTHON="${ANALYSIS_PYTHON:-${PYTHON:-.venv/bin/python}}"
 
+# 只展开配置与命令计划，不启动 GPU 服务，也不产生正式运行证据。
 if [[ "${MODE}" == "plan" ]]; then
   "${CONTRACT_PYTHON}" -m src.vllm_contract validate --config "${CONFIG}"
   "${CONTRACT_PYTHON}" -m src.vllm_contract server-plan --config "${CONFIG}"
@@ -50,6 +53,8 @@ if [[ "${MODE}" == "plan" ]]; then
   exit 0
 fi
 
+# 离线分析从 raw 重建统一 schema，并要求 Week 3 对比证据存在。
+# 图表准备完成仍不等于验收完成：报告和资源审计还需补齐。
 if [[ "${MODE}" == "analyze" ]]; then
   if [[ ! -x "${ANALYSIS_PYTHON}" ]]; then
     echo "Analysis environment missing: ${ANALYSIS_PYTHON}" >&2
@@ -115,6 +120,7 @@ fi
 SERVER_STARTED=false
 RUN_INITIALIZED=false
 CURRENT_PHASE="preflight"
+# 异常退出时停止本次启动的服务，确认清理结果，并记录失败发生的阶段。
 cleanup() {
   local exit_code=$?
   trap - EXIT INT TERM HUP
@@ -151,6 +157,7 @@ BENCHMARK_TIMEOUT="$("${GPU_PYTHON}" -m scripts.config_value --config "${CONFIG}
 SHUTDOWN_GRACE="$("${GPU_PYTHON}" -m scripts.config_value --config "${CONFIG}" --key server.shutdown_timeout_seconds)"
 mkdir -p "${RAW_DIR}/watchdogs"
 
+# 为子进程设置总超时、终止宽限期和独立日志，避免 GPU 阶段无限等待。
 run_bounded_phase() {
   local phase="$1"
   shift
@@ -164,6 +171,7 @@ run_bounded_phase() {
     --result "${RAW_DIR}/watchdogs/${phase}.json" -- "$@"
 }
 
+# 先验证直接模型推理，再启动 HTTP 服务并验证普通响应和 SSE 流式响应。
 run_bounded_phase offline-smoke \
   "${GPU_PYTHON}" -m src.vllm_offline_smoke --config "${CONFIG}"
 
@@ -188,6 +196,7 @@ if [[ ${#CASE_IDS[@]} -eq 0 ]]; then
   exit 1
 fi
 
+# 首个用例先跑压测 smoke；随后遍历全部正式 case，smoke 不替代正式测量。
 CURRENT_PHASE="benchmark-smoke"
 "${GPU_PYTHON}" -m scripts.week04_lifecycle --config "${CONFIG}" \
   status --status running --phase benchmark-smoke
@@ -202,8 +211,8 @@ for case_id in "${CASE_IDS[@]}"; do
     --config "${CONFIG}" --case-id "${case_id}"
 done
 
-# Exact Week 3 trace replay is a separate open-loop comparison artifact. The
-# client creates and verifies its comparison manifest from persisted Week 3 traces.
+# 原样重放 Week 3 已保存的到达轨迹，作为独立的开环对比证据。
+# 客户端根据这些 trace 创建并验证对比 manifest，不与官方 CLI 压测混为一组。
 CURRENT_PHASE="trace-replay"
 "${GPU_PYTHON}" -m scripts.week04_lifecycle --config "${CONFIG}" \
   status --status running --phase trace-replay
@@ -213,6 +222,7 @@ CURRENT_PHASE="server-stop"
 "${GPU_PYTHON}" scripts/start_vllm.py --config "${CONFIG}" stop
 SERVER_STARTED=false
 
+# 停止服务不等于停止云 VM；GPU 证据就绪后还需同步、停机、分析、审计和最终验收。
 CURRENT_PHASE="gpu-artifacts-ready"
 "${GPU_PYTHON}" -m scripts.week04_lifecycle --config "${CONFIG}" \
   status --status running --exit-code 0 --phase gpu_artifacts_ready

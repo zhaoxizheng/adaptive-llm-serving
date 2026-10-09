@@ -138,7 +138,7 @@ def prepare_batch_tensors(
     prompt_tokens: int,
     padding_side: str = "left",
 ):
-    """Tokenize, pad, mask, and create CPU tensors under one preprocessing timer."""
+    """统一计时分词、padding、掩码和 CPU 张量构造；返回形状相同的输入与掩码。"""
 
     torch = _torch()
     if tokenizer.pad_token_id is None:
@@ -181,7 +181,7 @@ def prepare_trace_batch_tensors(
     *,
     padding_side: str = "left",
 ):
-    """Prepare a batch whose token IDs are a pure function of trace identity."""
+    """根据请求身份构造确定性输入，使同一请求在不同组批策略下使用相同 token。"""
 
     torch = _torch()
     if tokenizer.pad_token_id is None:
@@ -272,6 +272,7 @@ def _select_prompt_tokens(logits: Any, attention_mask: Any):
 
     torch = _torch()
     positions = torch.arange(attention_mask.shape[1], device=attention_mask.device)
+    # 每行定位最后一个非 padding 位置，兼容左/右 padding，不能统一取最后一列。
     last_positions = (attention_mask.to(dtype=torch.long) * positions).max(dim=1).values
     row_positions = torch.arange(logits.shape[0], device=logits.device)
     last_logits = logits[row_positions, last_positions, :]
@@ -304,7 +305,10 @@ def run_batched_greedy_generation(
     baseline: CudaMemory,
     theoretical_kv_cache_bytes: int,
 ) -> tuple[BatchRunResult, list[list[int]]]:
-    """Run true cache-on batched prefill and greedy autoregressive decode."""
+    """整批执行开启 KV Cache 的定长贪心生成，返回性能指标和每行生成的 token。
+
+    每行生成 output_tokens 个 token，不因 EOS 提前停止；模型加载不计入生成耗时。
+    """
 
     torch = _torch()
     if output_tokens < 1:
@@ -315,6 +319,7 @@ def run_batched_greedy_generation(
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
 
+    # 禁用梯度记录；同步 GPU 后分别计量输入传输和预填充。
     with torch.inference_mode():
         (device_input_ids, attention_mask), h2d_ms = _measure_cuda(
             lambda: (
@@ -329,6 +334,7 @@ def run_batched_greedy_generation(
                 use_cache=True,
             )
         )
+        # gpu_ttft_ms 在此仅计预填充前向，不包含 H2D 或这次首 token 选择，区别于 Week 1。
         next_token = _select_prompt_tokens(prefill_output.logits, attention_mask)
         generated = next_token
         past_key_values = prefill_output.past_key_values
@@ -337,6 +343,7 @@ def run_batched_greedy_generation(
         for _ in range(output_tokens - 1):
 
             def decode_step():
+                # 每行只输入上一步 token；掩码保留历史 padding 信息，并增加一个有效位置。
                 next_attention_mask = torch.cat(
                     [
                         attention_mask,
@@ -360,12 +367,15 @@ def run_batched_greedy_generation(
             (past_key_values, attention_mask, next_token), elapsed_ms = _measure_cuda(
                 decode_step
             )
+            # KV 和掩码已更新；拼接输出用于记录，不在本步 _measure_cuda 的计时范围内。
             generated = torch.cat([generated, next_token], dim=1)
             decode_step_ms.append(elapsed_ms)
 
+        # 先读取张量分配/分配器保留显存峰值，再把输出搬回 CPU；不是整张 GPU 的占用。
         peak = current_peak_memory()
         generated_lists = generated.detach().cpu().tolist()
 
+    # 汇总各测量阶段；预处理单独传入，吞吐率按整个 batch 的输出 token 数计算。
     latency = summarize_batch_latency(
         preprocessing_ms=preprocessing_ms,
         h2d_ms=h2d_ms,

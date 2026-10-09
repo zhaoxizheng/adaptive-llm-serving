@@ -138,9 +138,8 @@ class HFBatchBackend:
         self._baseline = capture_model_memory_baseline()
 
     def execute(self, batch: Batch) -> BackendTiming:
-        # The service boundary starts before CPU tokenization/preprocessing. The
-        # Week 2 result splits preprocessing, H2D, and CUDA timing; Week 3 must
-        # charge all of them to the one busy worker.
+        # 服务耗时从 CPU 分词/预处理前开始：单个 worker 在这些阶段同样被占用。
+        # Week 2 分开统计预处理、H2D 和 CUDA 耗时；Week 3 将其全部计入服务边界。
         started_ns = time.monotonic_ns()
         prompts = {item.request.prompt_tokens for item in batch.requests}
         outputs = {item.request.output_tokens for item in batch.requests}
@@ -1191,11 +1190,13 @@ def run_matrix(
     output_root: str | Path | None = None,
     max_cases: int | None = None,
 ) -> dict[str, object]:
+    """运行或恢复请求级组批矩阵，共享到达轨迹并保存请求、批次与进度证据。"""
     cases = expand_matrix(config, profile)
     if max_cases is not None and max_cases < 0:
         raise ValueError("max_cases must be nonnegative")
     output = _mapping(config["output"], "output")
     selected_root = output_root
+    # 默认将 fake 模拟和非主测试产物隔离，避免与正式 HF 证据混用。
     if selected_root is None and backend_name == "fake":
         selected_root = str(output.get("simulation_root", "results/week03-simulation"))
     if selected_root is None and profile != "primary":
@@ -1205,11 +1206,13 @@ def run_matrix(
         config, paths, profile=profile, backend=backend_name
     )
     calibration = _mapping(metadata["calibration"], "metadata.calibration")
+    # 用校准容量乘以 case 的负载比例，确定请求到达率，而非随意指定绝对压力。
     capacity_rps = float(calibration["capacity_rps"])
     if not math.isfinite(capacity_rps) or capacity_rps <= 0:
         raise ValueError("calibration.capacity_rps must be finite and positive")
 
-    # Persist and validate every unique trace before the first policy case runs.
+    # 先保存并校验所有唯一 trace，再执行策略；同一 trace key 的策略使用相同到达序列。
+    # 续跑时必须与当前配置生成的轨迹指纹一致，不能悄悄替换请求输入。
     traces: dict[tuple[str, str, int], tuple[TraceRequest, ...]] = {}
     for case in cases:
         key = trace_key(case)
@@ -1231,12 +1234,14 @@ def run_matrix(
     skipped = 0
     for case in cases:
         directory = paths["cases"] / case_id(case)
+        # 只跳过完整且通过身份/产物校验的用例，不仅检查目录是否存在。
         if _case_is_complete(directory, metadata, case):
             skipped += 1
             continue
         if max_cases is not None and ran >= max_cases:
             break
         trace = traces[trace_key(case)]
+        # fake 使用模拟时间；HF 使用真实到达与 worker 执行，不可将模拟结果视为 GPU 性能。
         runner = simulate_case if backend_name == "fake" else run_online_case
         events, batches = runner(
             trace=trace,
@@ -1250,6 +1255,7 @@ def run_matrix(
         ran += 1
         print(f"completed {case_id(case)}: requests={len(events)}, batches={len(batches)}")
 
+    # 从已提交的用例产物重建汇总，避免中断造成总表与单用例记录不一致。
     complete, event_count, batch_count = _rebuild_aggregates(cases, paths, metadata)
     status = {
         "schema_version": SCHEMA_VERSION,
@@ -1258,6 +1264,7 @@ def run_matrix(
         "run_id": metadata["run_id"],
         "profile": profile,
         "backend": backend_name,
+        # HF 结果仍只是正式候选证据；矩阵完成不等于报告及最终验收已完成。
         "evidence_class": (
             "official_candidate" if backend_name == "hf" else "simulation_only"
         ),
@@ -1284,6 +1291,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """解析运行选项并交给 run_matrix；默认 fake 后端不执行 GPU 推理。"""
     args = parse_args()
     config = load_yaml(args.config)
     summary = run_matrix(

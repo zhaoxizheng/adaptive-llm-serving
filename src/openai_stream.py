@@ -112,7 +112,7 @@ OpenAIStreamEvent = OpenAIStreamChunk
 
 
 class SSEParser:
-    """Incrementally parse an EventSource stream from arbitrarily split bytes."""
+    """从任意切分的网络字节增量解析 SSE；网络分块不等于字符、行或事件边界。"""
 
     def __init__(
         self,
@@ -122,6 +122,7 @@ class SSEParser:
     ) -> None:
         self._max_line_bytes = _positive_int("max_line_bytes", max_line_bytes)
         self._max_event_bytes = _positive_int("max_event_bytes", max_event_bytes)
+        # UTF-8 字符可能跨网络分块；增量解码器保存未完整的字节，禁止逐块独立 decode。
         self._decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
         self._line: list[str] = []
         self._line_bytes = 0
@@ -194,6 +195,7 @@ class SSEParser:
         line_bytes = self._line_bytes
         self._line.clear()
         self._line_bytes = 0
+        # 空行表示 SSE 事件边界；多条 data 行会合并为同一个事件。
         if not line:
             event = self._dispatch_event()
             self._event_bytes = 0
@@ -376,6 +378,7 @@ def extract_openai_delta(
 
 
 def parse_openai_event(event: SSEEvent) -> OpenAIStreamChunk:
+    # [DONE] 是协议结束标记，不是 JSON；其他事件先校验 JSON 和 OpenAI 字段类型。
     if event.data.strip() == "[DONE]":
         return OpenAIStreamChunk(done=True, event=event)
     try:
@@ -434,6 +437,7 @@ def http_json(
     timeout = _positive_finite("timeout", timeout)
     max_response_bytes = _positive_int("max_response_bytes", max_response_bytes)
     max_error_bytes = _positive_int("max_error_bytes", max_error_bytes)
+    # 无 payload 时发送 GET，否则发送 JSON POST；读取有字节上限，异常也会关闭连接。
     body = None if payload is None else _json_bytes(payload)
     request = _request(
         url,
@@ -507,6 +511,7 @@ def stream_sse(
     max_error_bytes = _positive_int("max_error_bytes", max_error_bytes)
     max_line_bytes = _positive_int("max_line_bytes", max_line_bytes)
     max_event_bytes = _positive_int("max_event_bytes", max_event_bytes)
+    # 复制请求后开启流式返回，不修改调用方传入的字典。
     stream_payload = dict(payload)
     stream_payload["stream"] = True
     request = _request(
@@ -515,6 +520,7 @@ def stream_sse(
         headers=_request_headers(headers, api_key, accept="text/event-stream"),
         method="POST",
     )
+    # 单次网络操作超时与整个流的期限分别限制；总期限从建立连接前开始计算。
     deadline = time.monotonic() + max_duration
     response, secrets = _open(
         request,
@@ -546,6 +552,7 @@ def stream_sse(
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise _stream_timeout(url, secrets, max_duration)
+            # 每次读取最多等待剩余总期限，避免持续有数据的流无限延长运行。
             read_deadline_limited = remaining <= timeout
             _set_response_timeout(response, min(timeout, remaining))
             read_size = min(chunk_size, max_response_bytes + 1 - total_bytes)
@@ -559,6 +566,7 @@ def stream_sse(
             total_bytes += len(chunk)
             if total_bytes > max_response_bytes:
                 raise SSELimitError(f"SSE response exceeds {max_response_bytes} bytes")
+            # 交给增量解析器形成完整事件；一个网络分块可能产生零个或多个 SSE 事件。
             yield from parser.feed(chunk)
         yield from parser.close()
     except (OpenAIHTTPError, OpenAIStreamTimeout, SSEError, UnicodeDecodeError):
@@ -570,6 +578,7 @@ def stream_sse(
             raise _stream_timeout(url, secrets, max_duration) from None
         raise _transport_error(url, exc, secrets) from None
     finally:
+        # 正常结束、异常或调用方关闭生成器时都释放 HTTP 响应，避免连接泄漏。
         response.close()
 
 
