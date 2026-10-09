@@ -129,11 +129,17 @@ On the Mac:
 ```bash
 export GCP_PROJECT_ID=your-project-id
 export GCP_ZONE=us-central1-a
+export GCP_SSH_USER=llmlearner
 
 scripts/gcp_vm.sh create
 scripts/upload_to_gcp.sh
 scripts/gcp_vm.sh ssh
 ```
+
+The helper scripts use the explicit remote account `llmlearner`. This avoids
+letting `gcloud` derive `admin` from the local macOS username; Ubuntu already has
+an `admin` group, so its guest agent cannot create an `admin` user and SSH fails
+with `Permission denied (publickey)`.
 
 On the VM:
 

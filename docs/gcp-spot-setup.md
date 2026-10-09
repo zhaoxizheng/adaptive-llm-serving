@@ -19,6 +19,7 @@ On the Mac, install and initialize the Google Cloud CLI, then select an existing
 ```bash
 gcloud auth login
 gcloud config set project YOUR_PROJECT_ID
+gcloud config set compute/zone us-central1-a
 gcloud services enable compute.googleapis.com
 ```
 
@@ -29,11 +30,14 @@ Set the project and zone for all helper commands:
 ```bash
 export GCP_PROJECT_ID=YOUR_PROJECT_ID
 export GCP_ZONE=us-central1-a
+export GCP_SSH_USER=llmlearner
 ```
 
-Optional overrides are `GCP_VM_NAME`, `GCP_MACHINE_TYPE`, `GCP_IMAGE_FAMILY`,
-`GCP_IMAGE_NAME`, `GCP_DISK_GB`, and `GCP_MAX_RUN_DURATION`. Creation resolves the
-image family once and then passes the concrete image name to GCE. The default
+Optional overrides are `GCP_VM_NAME`, `GCP_SSH_USER`, `GCP_MACHINE_TYPE`,
+`GCP_IMAGE_FAMILY`, `GCP_IMAGE_NAME`, `GCP_DISK_GB`, and
+`GCP_MAX_RUN_DURATION`. Keep `GCP_SSH_USER=llmlearner` for this repository unless
+the VM was deliberately prepared with another Linux account. Creation resolves
+the image family once and then passes the concrete image name to GCE. The default
 maximum run duration is six hours, after which GCE stops the VM. Keep the resolved
 image and project defaults fixed in the Week 1 report.
 
@@ -75,6 +79,13 @@ real local commit rather than `uncommitted`:
 scripts/upload_to_gcp.sh
 scripts/gcp_vm.sh ssh
 ```
+
+The SSH, upload, and result-sync helpers all address
+`llmlearner@adaptive-llm-week01` explicitly. On the first connection, `gcloud`
+may create `~/.ssh/google_compute_engine`. Its passphrase is an optional local SSH
+key passphrase, not the Google account password; press Enter twice to leave it
+empty. A first-connection `Permanently added ... to the list of known hosts`
+message is expected.
 
 On the VM:
 
@@ -176,6 +187,24 @@ Open the GCP Quotas page for the project and region. Request only the quota iden
 ### CUDA is unavailable
 
 Rerun `bash scripts/bootstrap_gcp.sh .`; Google's installer may need a reboot and a second run. Then verify with `nvidia-smi`. If it still fails, stop the VM before investigating so GPU compute is not billed while idle.
+
+### SSH says `Permission denied (publickey)` for `admin`
+
+Do not connect as the local macOS account name. The Ubuntu image already has an
+`admin` group, which prevents the Google guest agent from creating an `admin`
+user. Use the repository's explicit account instead:
+
+```bash
+export GCP_SSH_USER=llmlearner
+scripts/gcp_vm.sh ssh
+```
+
+The equivalent direct command is:
+
+```bash
+gcloud compute ssh llmlearner@adaptive-llm-week01 \
+  --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE"
+```
 
 ### VM was stopped during a benchmark
 

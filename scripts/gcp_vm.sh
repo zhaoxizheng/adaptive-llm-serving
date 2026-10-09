@@ -5,6 +5,7 @@ ACTION="${1:-}"
 GCP_PROJECT_ID="${GCP_PROJECT_ID:-}"
 GCP_ZONE="${GCP_ZONE:-us-central1-a}"
 GCP_VM_NAME="${GCP_VM_NAME:-adaptive-llm-week01}"
+GCP_SSH_USER="${GCP_SSH_USER:-llmlearner}"
 GCP_MACHINE_TYPE="${GCP_MACHINE_TYPE:-g2-standard-4}"
 GCP_IMAGE_FAMILY="${GCP_IMAGE_FAMILY:-ubuntu-2404-lts-amd64}"
 GCP_IMAGE_PROJECT="${GCP_IMAGE_PROJECT:-ubuntu-os-cloud}"
@@ -56,7 +57,7 @@ case "${ACTION}" in
       --format='table(name,status,machineType.basename(),scheduling.provisioningModel,disks[0].diskSizeGb)'
     ;;
   ssh)
-    gcloud compute ssh "${GCP_VM_NAME}" \
+    gcloud compute ssh "${GCP_SSH_USER}@${GCP_VM_NAME}" \
       --project="${GCP_PROJECT_ID}" --zone="${GCP_ZONE}"
     ;;
   delete)

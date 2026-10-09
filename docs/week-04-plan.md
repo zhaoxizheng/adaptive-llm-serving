@@ -105,7 +105,8 @@ make verify-week04 PYTHON=.venv/bin/python
 本周默认 contract 只监听 loopback；非 loopback bind 会被拒绝，除非操作者显式确认。正式请求在 VM 内访问 `http://127.0.0.1:8000`，不把公网网络延迟混入结果。若从 Mac 调试，使用 SSH port forwarding，不开放无鉴权公网 endpoint：
 
 ```bash
-gcloud compute ssh "${GCP_VM_NAME:-adaptive-llm-week01}" \
+gcloud compute ssh \
+  "${GCP_SSH_USER:-llmlearner}@${GCP_VM_NAME:-adaptive-llm-week01}" \
   --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
   -- -N -L 8000:127.0.0.1:8000
 ```

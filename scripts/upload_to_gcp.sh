@@ -4,6 +4,7 @@ set -euo pipefail
 GCP_PROJECT_ID="${GCP_PROJECT_ID:-}"
 GCP_ZONE="${GCP_ZONE:-us-central1-a}"
 GCP_VM_NAME="${GCP_VM_NAME:-adaptive-llm-week01}"
+GCP_SSH_USER="${GCP_SSH_USER:-llmlearner}"
 REMOTE_DIR="${REMOTE_DIR:-adaptive-llm-serving}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -17,7 +18,7 @@ fi
 cd "${PROJECT_DIR}"
 python3 -m scripts.write_source_manifest --output "${SOURCE_MANIFEST}"
 
-gcloud compute ssh "${GCP_VM_NAME}" \
+gcloud compute ssh "${GCP_SSH_USER}@${GCP_VM_NAME}" \
   --project="${GCP_PROJECT_ID}" --zone="${GCP_ZONE}" \
   --command="mkdir -p ${REMOTE_DIR}"
 
@@ -36,7 +37,7 @@ gcloud compute scp --recurse \
   "${PROJECT_DIR}/scripts" \
   "${PROJECT_DIR}/src" \
   "${PROJECT_DIR}/tests" \
-  "${GCP_VM_NAME}:~/${REMOTE_DIR}/" \
+  "${GCP_SSH_USER}@${GCP_VM_NAME}:~/${REMOTE_DIR}/" \
   --project="${GCP_PROJECT_ID}" --zone="${GCP_ZONE}"
 
-echo "Uploaded project to ${GCP_VM_NAME}:~/${REMOTE_DIR}"
+echo "Uploaded project to ${GCP_SSH_USER}@${GCP_VM_NAME}:~/${REMOTE_DIR}"

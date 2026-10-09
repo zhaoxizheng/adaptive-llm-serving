@@ -1,6 +1,6 @@
 # Week 1 Plan: 跑通第一个可复现的 GPU 推理实验
 
-> 时间预算：10–12 小时
+> 时间预算：11 小时
 >
 > 本周主线：Mac 负责开发和记录，云端 NVIDIA GPU 负责执行。使用一个小模型，亲手观察 prefill、decode 和 KV Cache 对延迟的影响。
 >
@@ -108,7 +108,17 @@ adaptive-llm-serving/
 
 ## 每日安排
 
-## Day 1：准备仓库和云端方案（本地，约 1–1.5 小时）
+| Day | 时间 | 主任务 |
+|---|---:|---|
+| Day 1 | 1.5 h | 准备仓库、云端方案、预算与资源保护 |
+| Day 2 | 1.5 h | 理解自回归生成、prefill、decode 与 KV Cache |
+| Day 3 | 1.5 h | 创建并验证第一台云 GPU，完成 generation smoke |
+| Day 4 | 2 h | 实现可测量、可恢复的生成循环 |
+| Day 5 | 1.5 h | 运行 KV Cache on/off 正式对照实验 |
+| Day 6 | 2 h | 离线分析原始结果、画图并写结论 |
+| Day 7 | 1 h | 复盘、验收、同步证据并检查残余计费 |
+
+## Day 1：准备仓库和云端方案（本地，1.5 小时）
 
 ### 要做的事
 
@@ -145,7 +155,7 @@ results/**/raw/*.log
 
 Day 1 不需要启动 GPU。
 
-## Day 2：理解一次自回归生成（本地，约 1.5–2 小时）
+## Day 2：理解一次自回归生成（本地，1.5 小时）
 
 ### 需要弄懂的过程
 
@@ -190,7 +200,7 @@ KV bytes ≈
 
 在 `reports/week01.md` 写一段 300–500 字的说明，用自己的语言解释 prefill、decode 和 KV Cache，并手算一次模型在某个 sequence length 下的 KV Cache 大小。
 
-## Day 3：第一次启动云 GPU（云端，约 1–1.5 个计费小时）
+## Day 3：第一次启动云 GPU（云端，1.5 个计费小时）
 
 ### 启动前
 
@@ -207,10 +217,17 @@ KV bytes ≈
 cd /path/to/adaptive-llm-serving
 export GCP_PROJECT_ID=<your-project-id>
 export GCP_ZONE=us-central1-a
+export GCP_SSH_USER=llmlearner
 scripts/gcp_vm.sh create
 scripts/upload_to_gcp.sh
 scripts/gcp_vm.sh ssh
 ```
+
+必须显式使用远端账号 `llmlearner`。若省略用户名，`gcloud` 会从本机账号推导
+`admin`；Ubuntu 镜像已有同名 `admin` 用户组，guest agent 无法创建用户，最终会
+出现 `admin@<external-ip>: Permission denied (publickey)`。首次生成
+`~/.ssh/google_compute_engine` 时提示输入的是本地私钥口令，不是 Google 密码；
+不需要私钥口令时连续按两次 Enter 即可。
 
 VM 首次启动后执行：
 
@@ -324,7 +341,7 @@ peak_memory_mb
 
 Day 4 不启动云 GPU；先在本地完成代码审查和静态检查。
 
-## Day 5：完成 KV Cache 对照实验（云端，约 1.5–2 个计费小时）
+## Day 5：完成 KV Cache 对照实验（云端，1.5 个计费小时）
 
 ### 实验变量
 
@@ -371,7 +388,7 @@ use_cache = true / false
 - 一份成功/失败实验记录
 - 所有结果同步回本地后停止实例
 
-## Day 6：分析结果并画图（本地，约 1.5–2 小时）
+## Day 6：分析结果并画图（本地，2 小时）
 
 ### 至少制作两张图
 
@@ -441,14 +458,14 @@ use_cache = true / false
 
 | 内容 | 时间 | 运行地点 |
 |---|---:|---|
-| 概念学习与笔记 | 2 小时 | Mac |
+| 概念学习与笔记 | 1.5 小时 | Mac |
 | 仓库和实验设计 | 1.5 小时 | Mac |
 | 代码实现 | 2 小时 | Mac |
-| 云端环境与 smoke test | 1–1.5 小时 | 云 GPU |
-| 正式对照实验 | 1.5–2 小时 | 云 GPU |
+| 云端环境与 smoke test | 1.5 小时 | 云 GPU |
+| 正式对照实验 | 1.5 小时 | 云 GPU |
 | 数据分析和报告 | 2 小时 | Mac |
 | 复盘 | 1 小时 | Mac |
-| **总计** | **约 11–12 小时** | **云 GPU 约 3–4 小时** |
+| **总计** | **11 小时** | **云 GPU 3 小时** |
 
 ## 本周不要做什么
 
