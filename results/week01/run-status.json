@@ -1,35 +1,6 @@
 {
-  "captured_at": "2026-10-09T21:10:18.184045+00:00",
-  "cuda": {
-    "available": true,
-    "capabilities": [
-      [
-        8,
-        9
-      ]
-    ],
-    "device_count": 1,
-    "devices": [
-      "NVIDIA L4"
-    ],
-    "runtime": "12.8"
-  },
-  "gce": {
-    "image": "projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-amd64-v20260918",
-    "instance_id": "7565932392144473273",
-    "machine_type": "projects/461616259729/machineTypes/g2-standard-4",
-    "zone": "projects/461616259729/zones/us-central1-a"
-  },
-  "nvidia_smi": "NVIDIA L4, 580.178.04, 23034 MiB",
-  "packages": {
-    "accelerate": "1.1.1",
-    "matplotlib": "3.9.2",
-    "pandas": "2.2.3",
-    "torch": "2.8.0+cu128",
-    "transformers": "4.46.3"
-  },
-  "platform": "Linux-7.0.0-1014-gcp-x86_64-with-glibc2.39",
-  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+  "exit_code": 0,
+  "run_id": "3ee8d8e8-f677-44d9-937a-6acc8c0fde9f",
   "schema_version": 1,
   "source": {
     "critical_source_dirty": false,
@@ -188,6 +159,7 @@
     },
     "source_tree_fingerprint": "3ef8a2c54798fa70ac8b4defe2257eaea877735811a430ae2018d17f67df69c2"
   },
-  "status": "valid",
-  "validation_errors": []
+  "status": "completed",
+  "updated_at": "2026-10-09T21:20:08.126301+00:00",
+  "verification_receipt": "results/week01/verification-receipt.json"
 }

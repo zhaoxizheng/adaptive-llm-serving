@@ -1,7 +1,9 @@
 # Week 1 GPU setup
 
 Environment setup and the 32-token generation smoke passed on 2026-10-09.
-The full KV Cache benchmark has not been run.
+The full KV Cache benchmark later completed as run
+`3ee8d8e8-f677-44d9-937a-6acc8c0fde9f`; see `reports/week01.md` and the formal
+artifacts under `results/week01/`.
 After evidence was synced and validated locally, the VM was stopped and its
 temporary bootstrap SSH key was removed. The boot disk retains the environment,
 model cache, and source tree for the next session.

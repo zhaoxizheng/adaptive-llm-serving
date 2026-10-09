@@ -16,6 +16,8 @@ checkpoints/
 *.pth
 results/**/raw/*.log
 results/week01/setup/*.log
+results/week01/logs/launcher*.log
+results/week01/failed-parity-*/
 results/week0[5-8]/
 results/week09/
 results/week1[0-2]/

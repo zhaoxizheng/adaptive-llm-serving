@@ -1,0 +1,80 @@
+{
+  "config_fingerprint": "deb4a478c308af8b",
+  "expected_case_count": 60,
+  "run_id": "3ee8d8e8-f677-44d9-937a-6acc8c0fde9f",
+  "runtime": {
+    "cuda_runtime": "12.8",
+    "dependency_freeze_sha256": "4bfd8b9844baac3b629092e18cb6d1e3dce22099c5e733781f047fabcb639f8f",
+    "driver": "580.178.04",
+    "dtype": "bfloat16",
+    "gce_instance_id": "7565932392144473273",
+    "gpu_capabilities": [
+      [
+        8,
+        9
+      ]
+    ],
+    "gpu_count": 1,
+    "gpu_names": [
+      "NVIDIA L4"
+    ],
+    "machine_id": "7e2d21c5696a4888b2a783e5d3956d94",
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "model_revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "model_snapshot_fingerprint": "7e9bc1f3eb0f16c82ba7909344cf135b15a1bf59314cd127e27c6a1d42ed21b2",
+    "packages": {
+      "PyYAML": "6.0.2",
+      "accelerate": "1.1.1",
+      "huggingface-hub": "0.26.5",
+      "matplotlib": "3.9.2",
+      "pandas": "2.2.3",
+      "torch": "2.8.0+cu128",
+      "transformers": "4.46.3"
+    },
+    "platform": "Linux-7.0.0-1014-gcp-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "python_implementation": "CPython",
+    "pytorch": "2.8.0+cu128",
+    "transformers": "4.46.3"
+  },
+  "runtime_fingerprint": "8d5613a0369ab18d",
+  "schema_version": 2,
+  "scientific_config": {
+    "benchmark": {
+      "cache_modes": [
+        true,
+        false
+      ],
+      "output_tokens": [
+        32,
+        128
+      ],
+      "parity_tokens": 32,
+      "prompt_tokens": [
+        32,
+        256,
+        1024
+      ],
+      "repeats": 5,
+      "warmup_runs": 2
+    },
+    "generation": {
+      "prompt": "Explain why caching intermediate attention keys and values makes autoregressive language-model generation faster.",
+      "seed": 42
+    },
+    "model": {
+      "dtype": "bfloat16",
+      "id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "local_files_only": true,
+      "revision": "7ae557604adf67be50417f59c2c2f167def9a775"
+    }
+  },
+  "source": {
+    "critical_source_dirty": false,
+    "dirty_state_fingerprint": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+    "git_commit": "3c2df0b6efe887b6d74f2384757922f0d05c2c32",
+    "git_dirty": false,
+    "source_tree_fingerprint": "3ef8a2c54798fa70ac8b4defe2257eaea877735811a430ae2018d17f67df69c2"
+  },
+  "started_at": "2026-10-09T21:10:41.813612+00:00"
+}
