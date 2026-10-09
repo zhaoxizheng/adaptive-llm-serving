@@ -13,7 +13,12 @@ from src.common import (
     utc_now,
     write_json,
 )
-from src.inference import build_exact_length_input, load_model, run_greedy_generation
+from src.inference import (
+    build_exact_length_input,
+    load_model,
+    run_greedy_generation,
+    token_sequence_hash,
+)
 from src.result_store import append_row, read_rows
 from src.week01_contract import (
     RESULT_FIELDS,
@@ -105,6 +110,9 @@ def main() -> None:
         raise RuntimeError(
             f"Loaded dtype {resolved_dtype} does not match runtime contract {runtime['dtype']}"
         )
+    parity_tokens = int(config["benchmark"]["parity_tokens"])
+    if parity_tokens < 1:
+        raise ValueError("benchmark.parity_tokens must be at least 1")
 
     inputs = {
         prompt_tokens: build_exact_length_input(
@@ -131,7 +139,7 @@ def main() -> None:
     reference_hashes: dict[tuple[int, int, int], str] = {}
     for row in existing_rows:
         key = (int(row["prompt_tokens"]), int(row["output_tokens"]), int(row["repeat"]))
-        reference_hashes.setdefault(key, row["output_token_hash"])
+        reference_hashes.setdefault(key, row["parity_token_hash"])
 
     written = 0
     for prompt_tokens in config["benchmark"]["prompt_tokens"]:
@@ -150,20 +158,22 @@ def main() -> None:
                         config["generation"]["prompt"],
                         prompt_tokens,
                     )
-                    result, _ = run_greedy_generation(
+                    result, generated = run_greedy_generation(
                         model,
                         input_ids,
                         output_tokens,
                         use_cache=use_cache,
                         tokenization_ms=tokenization_ms,
                     )
+                    parity_hash = token_sequence_hash(generated[:parity_tokens])
                     output_key = (prompt_tokens, output_tokens, repeat)
                     previous_hash = reference_hashes.setdefault(
-                        output_key, result.output_token_hash
+                        output_key, parity_hash
                     )
-                    if previous_hash != result.output_token_hash:
+                    if previous_hash != parity_hash:
                         raise RuntimeError(
-                            f"Cache on/off produced different tokens for case {output_key}."
+                            "Cache on/off produced different tokens within the first "
+                            f"{min(parity_tokens, output_tokens)} tokens for case {output_key}."
                         )
                     row = {
                         "timestamp": utc_now(),
@@ -175,6 +185,7 @@ def main() -> None:
                         "model_revision": runtime["model_revision"],
                         "dtype": runtime["dtype"],
                         "repeat": repeat,
+                        "parity_token_hash": parity_hash,
                         **result.to_dict(),
                     }
                     append_row(output_path, row, RESULT_FIELDS)

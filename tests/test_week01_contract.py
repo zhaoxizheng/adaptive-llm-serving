@@ -30,6 +30,7 @@ def make_config() -> dict[str, Any]:
         "benchmark": {
             "warmup_runs": 1,
             "repeats": 1,
+            "parity_tokens": 2,
             "prompt_tokens": [4],
             "output_tokens": [2],
             "cache_modes": [True, False],
@@ -89,6 +90,7 @@ def make_row(
     use_cache: bool = True,
     repeat: int = 0,
     output_hash: str | None = None,
+    parity_hash: str | None = None,
 ) -> dict[str, str]:
     source = metadata["source"]
     runtime = metadata["runtime"]
@@ -123,6 +125,7 @@ def make_row(
             "end_to_end_ms": "9.25",
             "output_tokens_per_second": str(2 / 0.00825),
             "peak_memory_mb": "128.0",
+            "parity_token_hash": parity_hash or f"{repeat + 1:016x}",
             "output_token_hash": output_hash or f"{repeat + 1:016x}",
         }
     )
@@ -272,20 +275,35 @@ def test_mixed_result_identity_is_rejected(field: str, replacement: str) -> None
         )
 
 
-def test_cache_modes_must_produce_the_same_output_tokens() -> None:
+def test_cache_modes_must_produce_the_same_parity_prefix() -> None:
     config = make_config()
     metadata = make_metadata(config)
 
-    with pytest.raises(ValueError, match="Cache on/off output mismatch"):
+    with pytest.raises(ValueError, match="Cache on/off parity prefix mismatch"):
         validate_result_rows(
             [
-                make_row(metadata, use_cache=True, output_hash="1" * 16),
-                make_row(metadata, use_cache=False, output_hash="2" * 16),
+                make_row(metadata, use_cache=True, parity_hash="1" * 16),
+                make_row(metadata, use_cache=False, parity_hash="2" * 16),
             ],
             metadata,
             config,
             require_complete=False,
         )
+
+
+def test_cache_modes_may_diverge_after_the_parity_prefix() -> None:
+    config = make_config()
+    metadata = make_metadata(config)
+
+    validate_result_rows(
+        [
+            make_row(metadata, use_cache=True, output_hash="1" * 16),
+            make_row(metadata, use_cache=False, output_hash="2" * 16),
+        ],
+        metadata,
+        config,
+        require_complete=True,
+    )
 
 
 def test_partial_matrix_is_valid_only_for_resume() -> None:

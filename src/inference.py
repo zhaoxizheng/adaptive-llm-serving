@@ -14,6 +14,10 @@ from src.latency import summarize_latency
 T = TypeVar("T")
 
 
+def token_sequence_hash(tokens: list[int]) -> str:
+    return hashlib.sha256(bytes(str(tokens), "utf-8")).hexdigest()[:16]
+
+
 @dataclass
 class RunResult:
     use_cache: bool
@@ -192,7 +196,7 @@ def run_greedy_generation(
         decode_step_ms=decode_step_ms,
         output_tokens=output_tokens,
     )
-    token_hash = hashlib.sha256(bytes(str(generated), "utf-8")).hexdigest()[:16]
+    token_hash = token_sequence_hash(generated)
     result = RunResult(
         use_cache=use_cache,
         prompt_tokens=prompt_tokens,

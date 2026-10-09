@@ -16,7 +16,7 @@ from typing import Mapping
 from src.common import read_json, stable_fingerprint, utc_now
 from src.result_store import case_key, parse_bool
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 PINNED_REVISION_PATTERN = re.compile(r"[0-9a-f]{40}")
 
 RESULT_FIELDS = [
@@ -46,6 +46,7 @@ RESULT_FIELDS = [
     "end_to_end_ms",
     "output_tokens_per_second",
     "peak_memory_mb",
+    "parity_token_hash",
     "output_token_hash",
 ]
 
@@ -393,7 +394,7 @@ def validate_result_rows(
 ) -> set[tuple[int, int, int, bool]]:
     expected = expected_cases(config)
     seen: set[tuple[int, int, int, bool]] = set()
-    output_hashes: dict[tuple[int, int, int], str] = {}
+    parity_hashes: dict[tuple[int, int, int], str] = {}
     source = _mapping(metadata.get("source"), "source")
     runtime = _mapping(metadata.get("runtime"), "runtime")
     expected_identity = {
@@ -453,16 +454,17 @@ def validate_result_rows(
             for field in TPOT_FIELDS:
                 _parse_nonnegative_float(row, field, line)
 
-        if not re.fullmatch(r"[0-9a-f]{16}", row["output_token_hash"]):
-            raise ValueError(f"Row {line} has an invalid output_token_hash")
+        for field in ("parity_token_hash", "output_token_hash"):
+            if not re.fullmatch(r"[0-9a-f]{16}", row[field]):
+                raise ValueError(f"Row {line} has an invalid {field}")
         output_key = (
             integers["prompt_tokens"],
             integers["output_tokens"],
             integers["repeat"],
         )
-        previous_hash = output_hashes.setdefault(output_key, row["output_token_hash"])
-        if previous_hash != row["output_token_hash"]:
-            raise ValueError(f"Cache on/off output mismatch for case {output_key}")
+        previous_hash = parity_hashes.setdefault(output_key, row["parity_token_hash"])
+        if previous_hash != row["parity_token_hash"]:
+            raise ValueError(f"Cache on/off parity prefix mismatch for case {output_key}")
 
         if not math.isclose(
             measurements["inference_ttft_ms"],

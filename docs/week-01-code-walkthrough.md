@@ -297,18 +297,23 @@ for prompt_tokens in prompt_lengths:
 
 ## 10. 如何证明两条路径算的是同一件事
 
-生成使用 greedy `argmax`。每次运行会把输出 token ID 列表计算成一个短 SHA-256
-hash。对于相同的：
+生成使用 greedy `argmax`。每次运行会保存两个短 SHA-256 hash：完整输出对应
+`output_token_hash`，前 `min(32, output_tokens)` 个 token 对应
+`parity_token_hash`。对于相同的：
 
 ```text
 (prompt_tokens, output_tokens, repeat)
 ```
 
-Cache on/off 的 hash 必须一致，否则 benchmark 立即失败。
+Cache on/off 的 `parity_token_hash` 必须一致，否则 benchmark 立即失败。BF16 下两条
+路径使用不同矩阵 shape，舍入误差可能在较长生成的后段改变某次 greedy argmax；
+因此完整 `output_token_hash` 仍保留用于审计，但后 32 token 之后的分叉不会把固定
+shape 性能实验误判为实现错误。
 
 这体现了性能实验的基本原则：
 
-> 先证明优化前后输出一致，再比较速度。
+> 先证明优化前后在明确的 parity window 内一致，再比较速度；窗口外的数值分叉要
+> 作为实验限制保留证据。
 
 该 hash 只是实验一致性检查，不是生成文本的安全或密码学证明。
 
@@ -426,5 +431,6 @@ Smoke 成功不代表正式矩阵已经完成。
 2. 为什么输出 32 tokens 时只有 31 个 TPOT samples？
 3. Cache on 每一步为什么仍需要完整长度的 attention mask？
 4. `output_tokens_per_second` 为什么不是 `1000 / mean_tpot_ms`？
-5. 为什么 Cache on/off 输出 token hash 不一致时不能继续比较性能？
+5. 为什么 Cache on/off 的前 32 token 不一致时不能继续比较性能，而 32 token 后的
+   BF16 分叉可以在保留完整 hash 和限制说明后继续？
 6. 为什么 Spot resume 需要同时锁定配置、源码、模型、依赖和 GPU identity？

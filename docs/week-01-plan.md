@@ -331,6 +331,8 @@ total_generation_ms
 end_to_end_ms
 output_tokens_per_second
 peak_memory_mb
+parity_token_hash
+output_token_hash
 ```
 
 ### 当天产出
@@ -377,8 +379,11 @@ use_cache = true / false
 
 - KV Cache on：prefill 后，每个 decode step 只输入最新 token 和已有 cache。
 - KV Cache off：每个 decode step 输入当前完整序列，不传递 cache。
-- 两条路径必须生成相同 token，或至少验证前若干 token 一致。
-- 如果输出不一致，先解决正确性问题，不继续做性能结论。
+- 两条路径的前 `min(32, output_tokens)` 个 token 必须一致，并记录
+  `parity_token_hash`；完整序列另存 `output_token_hash`，用于暴露 BF16 长生成在
+  后段可能出现的数值分叉。
+- 如果前 32 个 token 不一致，先解决正确性问题，不继续做性能结论。若仅在后段
+  分叉，可继续比较固定 shape 的性能，但必须在报告中记录首次分叉位置和限制。
 
 ### 当天产出
 

@@ -13,6 +13,7 @@ generation:
 benchmark:
   warmup_runs: 2
   repeats: 5
+  parity_tokens: 32
   prompt_tokens: [32, 256, 1024]
   output_tokens: [32, 128]
   cache_modes: [true, false]
