@@ -158,6 +158,7 @@ def run_greedy_generation(
     def select_first_token() -> tuple[torch.Tensor, int]:
         """从预填充结果中贪心选择首个输出 token，返回 GPU 张量和整数 ID。"""
         # logits 的形状为 [batch, 输入长度, 词表大小]。
+        # 假设形状为`[1, 128, 32000]` ，表示：一条输入、128 个位置， 每个位置都有 32,000 个候选 token 的预测分数。
         # [:, -1, :] 取每条输入最后一个位置的分数，用来预测紧接提示词的 token。
         # 沿词表维度取 argmax，无需 softmax 或随机采样；keepdim 保留维度。
         # 本函数处理单条输入，因此 token 的形状为 [1, 1]，可直接用于下一步解码。
@@ -183,6 +184,7 @@ def run_greedy_generation(
                 # 形状为 [1, 提示词长度 + 已生成 token 数]；已生成序列包含本步输入的 next_token。
                 # 没有 padding，因此全部填 1，表示所有位置有效；因果限制由模型内部处理。
                 # 使用原掩码的数据类型，并直接在模型所在 GPU 上创建，避免从 CPU 搬运。
+                # L187和L204的step_mask实际一致。
                 step_mask = torch.ones(
                     (1, prompt_tokens + len(generated)),
                     dtype=attention_mask.dtype,

@@ -137,8 +137,10 @@ def _failure_row(
 
 
 def _theoretical_bytes(model_config: object, case: CaseSpec, dtype: str) -> int:
+    # 字节数 = 2 × 层数 × KV 头数 × 头维度 × 缓存序列长度 × batch 大小 × 每元素字节数
     estimate = estimate_from_model_config(
         model_config,
+        # prompt_tokens + output_tokens - 1，最后生成的 token 尚未再次送入模型。
         sequence_length=observed_kv_sequence_length(
             case.prompt_tokens, case.output_tokens
         ),

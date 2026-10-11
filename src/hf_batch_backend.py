@@ -138,12 +138,14 @@ def prepare_batch_tensors(
     prompt_tokens: int,
     padding_side: str = "left",
 ):
-    """统一计时分词、padding、掩码和 CPU 张量构造；返回形状相同的输入与掩码。"""
+    """把 prompt 构造成固定大小的 batch，转为 CPU 张量，并记录预处理耗时"""
 
     torch = _torch()
     if tokenizer.pad_token_id is None:
         raise ValueError("tokenizer.pad_token_id must be configured")
     started = time.perf_counter()
+    # - 第一条使用原始 prompt，后续条目添加请求编号前缀（Synthetic request 0X），再分别分词。
+    # - 将每条 token 序列调整到`prompt_tokens` 长度： 不足就重复，过长就截断
     batch = build_exact_length_batch(
         tokenizer,
         prompt,
@@ -327,6 +329,7 @@ def run_batched_greedy_generation(
                 host_attention_mask.to(model.device),
             )
         )
+        # gpu_ttft_ms 在此仅计预填充前向，不包含 H2D 或这次首 token 选择（_select_prompt_tokens），区别于 Week 1。
         prefill_output, gpu_ttft_ms = _measure_cuda(
             lambda: model(
                 input_ids=device_input_ids,
@@ -334,7 +337,6 @@ def run_batched_greedy_generation(
                 use_cache=True,
             )
         )
-        # gpu_ttft_ms 在此仅计预填充前向，不包含 H2D 或这次首 token 选择，区别于 Week 1。
         next_token = _select_prompt_tokens(prefill_output.logits, attention_mask)
         generated = next_token
         past_key_values = prefill_output.past_key_values
@@ -373,6 +375,7 @@ def run_batched_greedy_generation(
 
         # 先读取张量分配/分配器保留显存峰值，再把输出搬回 CPU；不是整张 GPU 的占用。
         peak = current_peak_memory()
+        # 把 GPU 张量搬回 CPU，再转换成 Python 列表。
         generated_lists = generated.detach().cpu().tolist()
 
     # 汇总各测量阶段；预处理单独传入，吞吐率按整个 batch 的输出 token 数计算。
