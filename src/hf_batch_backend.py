@@ -229,7 +229,7 @@ def capture_model_memory_baseline() -> CudaMemory:
 
 def current_peak_memory() -> CudaMemory:
     torch = _torch()
-    return CudaMemory(
+    return CudaMemory( 
         allocated_bytes=int(torch.cuda.max_memory_allocated()),
         reserved_bytes=int(torch.cuda.max_memory_reserved()),
     )

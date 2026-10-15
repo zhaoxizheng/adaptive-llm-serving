@@ -74,6 +74,15 @@ def generate_poisson_trace(
     Arrival and shape selection use separate seeded random streams. Consequently,
     changing a mixed-length probability does not silently change arrival times.
     The first request follows an exponential inter-arrival from case time zero.
+
+    1. 到达时间和请求长度分别随机生成 代码使用两个独立的伪随机数生成器：
+    - `arrival_rng` ：决定请求什么时候到达。根据泊松分布。
+    - `shape_rng` ：决定请求属于哪种长度类别，例如短请求或长请求。根据weight随机选择。
+    两者都由固定的`seed` 初始化，因此结果可复现。 在其他参数不变时，调整长短请求的比例不会改变请求的到达时间 ，方便公平比较不同负载组合。
+
+    2. 第一个请求也需要等待 到达时间生成逻辑 从时间零开始，先抽取一个指数分布的等待时间，再生成第一个请求，并非默认在`t = 0` 发出。
+
+    若到达率是`λ` 个请求/秒，则每次等待时间满足`Δt ~ Exp(λ)` ，平均为`1/λ` 秒。例如`λ = 10` 时，平均等待`0.1` 秒，但每次实际间隔随机。
     """
 
     if (duration_ns is None) == (duration_seconds is None):

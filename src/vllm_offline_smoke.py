@@ -60,18 +60,18 @@ def run_offline_smoke(
     except ImportError as error:
         raise RuntimeError("The pinned vLLM runtime could not be imported") from error
 
-    started = time.perf_counter()
+    started = time.perf_counter() # 适合测量耗时的高精度计时器
     llm = LLM(
         model=str(plan["model"]),
         revision=str(plan["revision"]),
-        dtype=str(plan["dtype"]),
-        max_model_len=int(plan["max_model_len"]),
-        gpu_memory_utilization=float(plan["gpu_memory_utilization"]),
+        dtype=str(plan["dtype"]), # 模型权重和主要计算所用的浮点数据类型
+        max_model_len=int(plan["max_model_len"]), # 单个请求允许的最大总序列长度，输入 token 数 + 生成 token 数 ≤ max_model_len
+        gpu_memory_utilization=float(plan["gpu_memory_utilization"]), # vLLM 这个实例使用的 GPU 显存预算比例
     )
     sampling = SamplingParams(
-        temperature=float(plan["temperature"]),
-        max_tokens=int(plan["requested_output_tokens"]),
-        ignore_eos=True,
+        temperature=float(plan["temperature"]), # 随机性
+        max_tokens=int(plan["requested_output_tokens"]), # 最多生成多少个 token， 不包含输入
+        ignore_eos=True, # 遇到 EOS（结束 token）也不提前停止，便于 smoke 测试按指定长度生成。
         seed=int(plan["seed"]),
     )
     outputs = llm.generate([str(plan["prompt"])], sampling, use_tqdm=False)
